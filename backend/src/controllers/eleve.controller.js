@@ -159,6 +159,37 @@ exports.createEleve = async (req, res) => {
     if (data.statut) data.statut = data.statut.toUpperCase();
     if (data.sexe) data.sexe = data.sexe.toUpperCase();
 
+    // Extraire les données du tuteur si elles sont dans un objet imbriqué
+    let tuteurNom = data.tuteurNom || data.tuteur_nom || (data.tuteur && data.tuteur.nom);
+    let tuteurPrenom = data.tuteurPrenom || data.tuteur_prenom || (data.tuteur && data.tuteur.prenom);
+    let tuteurTelephone = data.tuteurTelephone || data.tuteur_telephone || (data.tuteur && data.tuteur.telephone);
+    let tuteurEmail = data.tuteurEmail || data.tuteur_email || (data.tuteur && data.tuteur.email);
+    let tuteurAdresse = data.tuteurAdresse || data.tuteur_adresse || (data.tuteur && data.tuteur.adresse);
+
+    // Générer automatiquement le matricule si non fourni
+    let matricule = data.matricule;
+    if (!matricule) {
+      const currentYear = new Date().getFullYear();
+      // Trouver le dernier matricule de l'année en cours
+      const lastMatriculeResult = await query(
+        `SELECT matricule FROM eleves
+         WHERE matricule LIKE $1
+         ORDER BY matricule DESC
+         LIMIT 1`,
+        [`EL${currentYear}%`]
+      );
+
+      let nextNumber = 1;
+      if (lastMatriculeResult.rows.length > 0) {
+        const lastMatricule = lastMatriculeResult.rows[0].matricule;
+        const lastNumber = parseInt(lastMatricule.substring(6)); // Extraire le numéro après "EL2024"
+        nextNumber = lastNumber + 1;
+      }
+
+      // Formater le matricule: EL2024001, EL2024002, etc.
+      matricule = `EL${currentYear}${nextNumber.toString().padStart(3, '0')}`;
+    }
+
     const result = await query(
       `INSERT INTO eleves (
         matricule, nom, prenom, date_naissance, lieu_naissance, sexe,
@@ -168,19 +199,19 @@ exports.createEleve = async (req, res) => {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *`,
       [
-        data.matricule,
+        matricule,
         data.nom,
         data.prenom,
         data.dateNaissance || data.date_naissance,
         data.lieuNaissance || data.lieu_naissance,
         data.sexe,
-        data.classeId || data.classe_id,
-        data.tuteurNom || data.tuteur_nom,
-        data.tuteurPrenom || data.tuteur_prenom,
-        data.tuteurTelephone || data.tuteur_telephone,
-        data.tuteurEmail || data.tuteur_email,
-        data.tuteurAdresse || data.tuteur_adresse,
-        data.groupeSanguin || data.groupe_sanguin,
+        data.classeId || data.classe_id || null,
+        tuteurNom,
+        tuteurPrenom,
+        tuteurTelephone,
+        tuteurEmail || null,
+        tuteurAdresse,
+        data.groupeSanguin || data.groupe_sanguin || null,
         data.allergies || [],
         data.maladiesChroniques || data.maladies_chroniques || [],
         data.statut || 'ACTIF',
@@ -191,6 +222,7 @@ exports.createEleve = async (req, res) => {
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
+    console.error('Erreur lors de la création de l\'élève:', error);
     res.status(400).json({ message: error.message });
   }
 };
