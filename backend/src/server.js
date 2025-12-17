@@ -1,11 +1,10 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
 const cors = require('cors');
 const morgan = require('morgan');
+const { testConnection, closePool } = require('./lib/db');
 require('dotenv').config();
 
 const app = express();
-const prisma = new PrismaClient();
 
 // Middleware
 app.use(cors());
@@ -28,8 +27,8 @@ app.use('/api/rapports', require('./routes/rapport.routes'));
 app.get('/', (req, res) => {
   res.json({
     message: 'API de Gestion d\'Établissement Scolaire - Togo',
-    version: '2.0.0',
-    database: 'PostgreSQL',
+    version: '3.0.0',
+    database: 'PostgreSQL (SQL pur)',
     status: 'actif'
   });
 });
@@ -43,34 +42,41 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Connexion à la base de données et démarrage du serveur
-async function main() {
+// Démarrage du serveur
+async function startServer() {
   try {
-    // Test de la connexion à la base de données
-    await prisma.$connect();
-    console.log('✅ Connecté à PostgreSQL');
+    // Test de connexion à PostgreSQL
+    const connected = await testConnection();
+
+    if (!connected) {
+      console.error('❌ Impossible de se connecter à PostgreSQL');
+      process.exit(1);
+    }
 
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
       console.log(`🚀 Serveur démarré sur le port ${PORT}`);
+      console.log(`📖 Documentation: http://localhost:${PORT}/`);
     });
   } catch (error) {
-    console.error('❌ Erreur de connexion à PostgreSQL:', error);
+    console.error('❌ Erreur au démarrage:', error);
     process.exit(1);
   }
 }
 
-// Gestion de la fermeture propre
+// Gestion de l'arrêt propre
 process.on('SIGINT', async () => {
-  await prisma.$disconnect();
+  console.log('\n⏹️  Arrêt du serveur...');
+  await closePool();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  await prisma.$disconnect();
+  console.log('\n⏹️  Arrêt du serveur...');
+  await closePool();
   process.exit(0);
 });
 
-main();
+startServer();
 
-module.exports = { app, prisma };
+module.exports = app;

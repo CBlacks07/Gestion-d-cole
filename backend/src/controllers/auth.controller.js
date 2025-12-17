@@ -1,4 +1,4 @@
-const prisma = require('../lib/prisma');
+const { query } = require('../lib/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -15,11 +15,13 @@ exports.register = async (req, res) => {
   try {
     const { nom, prenom, email, motDePasse, role, telephone } = req.body;
 
-    const userExists = await prisma.user.findUnique({
-      where: { email }
-    });
+    // Vérifier si l'utilisateur existe
+    const existingUser = await query(
+      'SELECT id FROM users WHERE email = $1',
+      [email]
+    );
 
-    if (userExists) {
+    if (existingUser.rows.length > 0) {
       return res.status(400).json({ message: 'Cet utilisateur existe déjà' });
     }
 
@@ -27,16 +29,22 @@ exports.register = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(motDePasse, salt);
 
-    const user = await prisma.user.create({
-      data: {
+    // Créer l'utilisateur
+    const result = await query(
+      `INSERT INTO users (nom, prenom, email, mot_de_passe, role, telephone)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, nom, prenom, email, role, telephone, actif, created_at`,
+      [
         nom,
         prenom,
         email,
-        motDePasse: hashedPassword,
-        role: role ? role.toUpperCase() : 'SECRETAIRE',
+        hashedPassword,
+        role ? role.toUpperCase() : 'SECRETAIRE',
         telephone
-      }
-    });
+      ]
+    );
+
+    const user = result.rows[0];
 
     res.status(201).json({
       id: user.id,
@@ -58,19 +66,25 @@ exports.login = async (req, res) => {
   try {
     const { email, motDePasse } = req.body;
 
-    const user = await prisma.user.findUnique({
-      where: { email }
-    });
+    // Rechercher l'utilisateur
+    const result = await query(
+      'SELECT id, nom, prenom, email, mot_de_passe, role, actif FROM users WHERE email = $1',
+      [email]
+    );
 
-    if (!user) {
+    if (result.rows.length === 0) {
       return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
     }
 
-    const isMatch = await bcrypt.compare(motDePasse, user.motDePasse);
+    const user = result.rows[0];
+
+    // Vérifier le mot de passe
+    const isMatch = await bcrypt.compare(motDePasse, user.mot_de_passe);
     if (!isMatch) {
       return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
     }
 
+    // Vérifier si le compte est actif
     if (!user.actif) {
       return res.status(401).json({ message: 'Compte désactivé' });
     }
@@ -93,21 +107,16 @@ exports.login = async (req, res) => {
 // @route   GET /api/auth/me
 exports.getMe = async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: {
-        id: true,
-        nom: true,
-        prenom: true,
-        email: true,
-        role: true,
-        telephone: true,
-        actif: true,
-        createdAt: true
-      }
-    });
+    const result = await query(
+      'SELECT id, nom, prenom, email, role, telephone, actif, created_at FROM users WHERE id = $1',
+      [req.user.id]
+    );
 
-    res.json(user);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+
+    res.json(result.rows[0]);
   } catch (error) {
     console.error('Erreur getMe:', error);
     res.status(500).json({ message: error.message });

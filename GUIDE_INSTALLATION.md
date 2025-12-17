@@ -1,4 +1,4 @@
-# Guide d'Installation
+# Guide d'Installation - Version Simplifiée (SQL Pur)
 
 ## Prérequis
 
@@ -6,33 +6,19 @@
 - PostgreSQL (version 14 ou supérieure)
 - Git
 
-## Installation
+## Installation Rapide
 
-### 1. Cloner le projet
+### 1. Installer PostgreSQL
 
-```bash
-git clone <url-du-repo>
-cd Gestion-d-cole
-```
+**Windows:**
+1. Télécharger : https://www.postgresql.org/download/windows/
+2. Installer avec les options par défaut
+3. Mot de passe postgres : `Admin` (pendant l'installation)
 
-### 2. Installer les dépendances
-
-```bash
-npm run install-all
-```
-
-Cette commande installera les dépendances pour le projet principal, le backend et le frontend.
-
-### 3. Configuration de la base de données
-
-#### Installation de PostgreSQL
-
-**Ubuntu/Debian:**
+**Linux:**
 ```bash
 sudo apt update
 sudo apt install postgresql postgresql-contrib
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
 ```
 
 **macOS:**
@@ -41,230 +27,213 @@ brew install postgresql@14
 brew services start postgresql@14
 ```
 
-**Windows:**
-Télécharger et installer PostgreSQL depuis https://www.postgresql.org/download/windows/
+### 2. Créer la base de données
 
-#### Créer la base de données
+**Option A : Avec pgAdmin (Recommandé pour Windows)**
+
+1. Ouvrir **pgAdmin 4**
+2. Se connecter (mot de passe: `Admin`)
+3. Créer l'utilisateur:
+   - Clic droit sur "Login/Group Roles" → Create → Login/Group Role
+   - Name: `gestion_user`
+   - Password: `Admin`
+   - Privileges: ✅ Can login
+4. Créer la base:
+   - Clic droit sur "Databases" → Create → Database
+   - Database: `Ecole`
+   - Owner: `gestion_user`
+
+**Option B : Ligne de commande**
 
 ```bash
-# Se connecter à PostgreSQL
+# Linux/Mac
 sudo -u postgres psql
 
-# Dans le shell PostgreSQL, créer l'utilisateur et la base de données:
-CREATE USER gestion_user WITH PASSWORD 'votre_mot_de_passe_securise';
-CREATE DATABASE gestion_ecole_togo OWNER gestion_user;
-GRANT ALL PRIVILEGES ON DATABASE gestion_ecole_togo TO gestion_user;
+# Windows PowerShell
+& "C:\Program Files\PostgreSQL\14\bin\psql.exe" -U postgres
+
+# Dans psql:
+CREATE USER gestion_user WITH PASSWORD 'Admin';
+CREATE DATABASE "Ecole" OWNER gestion_user;
+GRANT ALL PRIVILEGES ON DATABASE "Ecole" TO gestion_user;
 \q
 ```
 
-### 4. Configuration du backend
-
-Créer un fichier `.env` dans le dossier `backend/`:
+### 3. Cloner et installer le projet
 
 ```bash
-cd backend
-cp .env.example .env
-```
-
-Modifier le fichier `.env` avec vos paramètres PostgreSQL:
-
-```env
-PORT=5000
-DATABASE_URL="postgresql://gestion_user:votre_mot_de_passe_securise@localhost:5432/gestion_ecole_togo?schema=public"
-JWT_SECRET=votre_secret_jwt_tres_securise_ici_changez_moi
-NODE_ENV=development
-```
-
-**Important:**
-- Changez `votre_mot_de_passe_securise` par le mot de passe que vous avez créé
-- Changez `JWT_SECRET` par une chaîne aléatoire sécurisée
-
-### 5. Initialiser la base de données avec Prisma
-
-```bash
-# Toujours dans le dossier backend/
-npx prisma generate
-npx prisma migrate dev --name init
-```
-
-Ces commandes vont :
-- Générer le client Prisma
-- Créer toutes les tables dans PostgreSQL
-- Appliquer le schéma de base de données
-
-### 6. (Optionnel) Visualiser la base de données
-
-Prisma Studio permet de visualiser et éditer les données :
-
-```bash
-cd backend
-npm run prisma:studio
-```
-
-Cela ouvrira une interface web sur http://localhost:5555
-
-### 7. Créer un utilisateur administrateur
-
-Une fois le backend démarré, créez un utilisateur admin :
-
-```bash
-# Démarrer le backend (dans un terminal)
-cd backend
-npm run dev
-```
-
-Puis dans un autre terminal:
-
-```bash
-curl -X POST http://localhost:5000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "nom": "Admin",
-    "prenom": "Système",
-    "email": "admin@ecole.tg",
-    "motDePasse": "Admin123!",
-    "role": "admin",
-    "telephone": "+228 00 00 00 00"
-  }'
-```
-
-## Lancement de l'application
-
-### Mode développement
-
-Dans le répertoire racine du projet:
-
-```bash
-npm run dev
-```
-
-Cela lance:
-- Backend sur http://localhost:5000
-- Frontend sur http://localhost:3000
-
-### Mode production
-
-```bash
-# Build du frontend
-npm run build
-
-# Démarrer le backend
-npm start
-```
-
-Le backend servira également le frontend buildé.
-
-## Accès à l'application
-
-1. Ouvrir votre navigateur
-2. Aller sur http://localhost:3000
-3. Se connecter avec les identifiants créés:
-   - Email: admin@ecole.tg
-   - Mot de passe: Admin123!
-
-## Scripts Prisma utiles
-
-```bash
-cd backend
-
-# Générer le client Prisma après modification du schéma
-npm run prisma:generate
-
-# Créer une nouvelle migration
-npm run prisma:migrate
-
-# Ouvrir Prisma Studio (interface graphique)
-npm run prisma:studio
-
-# Réinitialiser la base de données (⚠️ supprime toutes les données)
-npx prisma migrate reset
-```
-
-## Résolution de problèmes
-
-### Erreur de connexion PostgreSQL
-
-```bash
-# Vérifier que PostgreSQL est en cours d'exécution
-sudo systemctl status postgresql
-
-# Redémarrer PostgreSQL si nécessaire
-sudo systemctl restart postgresql
-
-# Vérifier que vous pouvez vous connecter
-psql -U gestion_user -d gestion_ecole_togo -h localhost
-```
-
-### Erreur "DATABASE_URL not found"
-
-Vérifiez que le fichier `.env` existe dans le dossier `backend/` et contient la variable `DATABASE_URL`.
-
-### Erreur de migration Prisma
-
-```bash
-# Réinitialiser complètement la base de données
-cd backend
-npx prisma migrate reset
-
-# Puis recréer les tables
-npx prisma migrate dev --name init
-```
-
-### Port déjà utilisé
-
-Si le port 5000 ou 3000 est déjà utilisé:
-
-```bash
-# Backend: modifier PORT dans backend/.env
-# Frontend: modifier le port dans frontend/vite.config.ts
-```
-
-### Erreur de dépendances
-
-```bash
-# Nettoyer et réinstaller
-rm -rf node_modules backend/node_modules frontend/node_modules
-rm package-lock.json backend/package-lock.json frontend/package-lock.json
+git clone <url-du-repo>
+cd Gestion-d-cole
 npm run install-all
 ```
 
-### Problème d'authentification PostgreSQL
-
-Si vous avez des erreurs d'authentification, éditez le fichier de configuration PostgreSQL:
+### 4. Configurer le backend
 
 ```bash
-# Ubuntu/Debian
-sudo nano /etc/postgresql/14/main/pg_hba.conf
-
-# Changez la ligne pour localhost en:
-# local   all   all   md5
-# host    all   all   127.0.0.1/32   md5
-
-# Redémarrez PostgreSQL
-sudo systemctl restart postgresql
+cd backend
+copy .env.example .env    # Windows
+# ou
+cp .env.example .env      # Linux/Mac
 ```
 
-## Migration des données (MongoDB → PostgreSQL)
+Le fichier `.env` est déjà configuré avec:
+```env
+PORT=5000
+DATABASE_URL="postgresql://gestion_user:Admin@localhost:5432/Ecole?schema=public"
+JWT_SECRET=votre_secret_jwt_tres_securise_ici
+NODE_ENV=development
+```
 
-Si vous aviez des données dans MongoDB et voulez les migrer :
+### 5. Créer les tables (Simple !)
 
-1. Exportez vos données de MongoDB en JSON
-2. Créez un script de migration utilisant Prisma
-3. Importez les données en adaptant les structures
+**Windows PowerShell:**
+```powershell
+# Se connecter et exécuter le script
+& "C:\Program Files\PostgreSQL\14\bin\psql.exe" -U gestion_user -d Ecole -f database/schema.sql
+```
 
-**Note:** Les IDs changeront (ObjectId → UUID)
+**Linux/Mac:**
+```bash
+psql -U gestion_user -d Ecole -f database/schema.sql
+# Mot de passe: Admin
+```
 
-## Données de test
+Vous verrez plein de `CREATE TABLE`, `CREATE INDEX`, etc. C'est normal ! ✅
 
-Pour tester l'application, vous pouvez :
+### 6. Lancer l'application
 
-1. Utiliser Prisma Studio pour ajouter des données manuellement
-2. Créer un script de seed (optionnel)
-3. Utiliser l'interface web pour ajouter des données
+**Terminal 1 - Backend:**
+```bash
+cd backend
+npm run dev
+```
+
+Vous verrez:
+```
+✅ Connexion PostgreSQL réussie
+🚀 Serveur démarré sur le port 5000
+```
+
+**Terminal 2 - Frontend:**
+```bash
+cd frontend
+npm run dev
+```
+
+Vous verrez:
+```
+➜ Local: http://localhost:3000/
+```
+
+### 7. Créer un utilisateur admin
+
+**Option A : Avec un outil API (Postman/Insomnia/Thunder Client)**
+```
+POST http://localhost:5000/api/auth/register
+
+Body (JSON):
+{
+  "nom": "Admin",
+  "prenom": "Système",
+  "email": "admin@ecole.tg",
+  "motDePasse": "Admin123!",
+  "role": "admin",
+  "telephone": "+228 00 00 00 00"
+}
+```
+
+**Option B : Avec curl**
+```bash
+curl -X POST http://localhost:5000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"nom":"Admin","prenom":"Système","email":"admin@ecole.tg","motDePasse":"Admin123!","role":"admin","telephone":"+228 00 00 00 00"}'
+```
+
+### 8. Se connecter à l'application
+
+🌐 Ouvrir: **http://localhost:3000**
+
+```
+📧 Email: admin@ecole.tg
+🔑 Mot de passe: Admin123!
+```
+
+## ✅ Voilà, c'est tout !
+
+Pas de Prisma, pas de migrations complexes, juste un script SQL et c'est parti ! 🚀
+
+## 📝 Configuration Simple
+
+| Paramètre | Valeur |
+|-----------|---------|
+| **Base de données** | `Ecole` |
+| **Utilisateur** | `gestion_user` |
+| **Mot de passe** | `Admin` |
+| **Script SQL** | `backend/database/schema.sql` |
+| **Backend** | http://localhost:5000 |
+| **Frontend** | http://localhost:3000 |
+
+## 🛠️ Commandes Utiles
+
+```bash
+# Réinitialiser la base de données
+psql -U gestion_user -d Ecole -f backend/database/schema.sql
+
+# Se connecter à PostgreSQL
+psql -U gestion_user -d Ecole
+
+# Voir les tables
+\dt
+
+# Voir les données d'une table
+SELECT * FROM users;
+
+# Quitter psql
+\q
+```
+
+## 🚨 Problèmes Courants
+
+### Erreur "psql: command not found"
+**Windows**: Ajouter PostgreSQL au PATH:
+```
+C:\Program Files\PostgreSQL\14\bin
+```
+
+### Erreur "database Ecole does not exist"
+Créer la base avec pgAdmin ou psql (voir étape 2)
+
+### Port 5000 déjà utilisé
+Changer dans `backend/.env`:
+```env
+PORT=5001
+```
+
+### Erreur de connexion
+Vérifier que PostgreSQL est démarré:
+```bash
+# Windows
+Get-Service postgresql*
+
+# Linux
+sudo systemctl status postgresql
+```
+
+## 🎯 Avantages de cette approche
+
+✅ **Simple** : Pas de Prisma, pas de migrations complexes
+✅ **Compatible** : Fonctionne sur TOUS les hébergeurs PostgreSQL
+✅ **Rapide** : Installation en 5 minutes
+✅ **Transparent** : Le SQL est visible dans `schema.sql`
+✅ **Flexible** : Modifiez le SQL directement si besoin
+✅ **Léger** : Moins de dépendances
+
+## 📚 Ressources
+
+- PostgreSQL: https://www.postgresql.org/docs/
+- pgAdmin: https://www.pgadmin.org/docs/
+- Module pg (Node.js): https://node-postgres.com/
 
 ## Support
 
-Pour toute question ou problème :
-- Consultez la documentation Prisma: https://www.prisma.io/docs
-- Consultez la documentation PostgreSQL: https://www.postgresql.org/docs/
-- Créez une issue sur le dépôt GitHub
+Pour toute question, créez une issue sur GitHub !
