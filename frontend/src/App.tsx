@@ -12,6 +12,7 @@ import Notes from './pages/Notes'
 import Absences from './pages/Absences'
 import Paiements from './pages/Paiements'
 import Rapports from './pages/Rapports'
+import Configuration from './pages/Configuration'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -41,6 +42,7 @@ function App() {
           <Route path="absences" element={<Absences />} />
           <Route path="paiements" element={<Paiements />} />
           <Route path="rapports" element={<Rapports />} />
+          <Route path="configuration" element={<Configuration />} />
         </Route>
       </Routes>
     </Router>

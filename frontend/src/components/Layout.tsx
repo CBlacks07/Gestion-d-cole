@@ -11,6 +11,7 @@ import {
   Calendar,
   CreditCard,
   BarChart3,
+  Settings,
   LogOut
 } from 'lucide-react'
 
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Absences', href: '/absences', icon: Calendar },
   { name: 'Paiements', href: '/paiements', icon: CreditCard },
   { name: 'Rapports', href: '/rapports', icon: BarChart3 },
+  { name: 'Configuration', href: '/configuration', icon: Settings },
 ]
 
 export default function Layout() {
