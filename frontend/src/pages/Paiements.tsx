@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import api from '../services/api'
 import { Paiement } from '../types'
-import { Plus, DollarSign } from 'lucide-react'
+import { Plus, DollarSign, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import PaiementFormModal from '../components/PaiementFormModal'
 
@@ -24,6 +24,19 @@ export default function Paiements() {
       console.error('Erreur lors du chargement des paiements', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDelete = async (id: string, eleve: string, type: string) => {
+    if (!confirm(`Voulez-vous vraiment supprimer le paiement de ${type} pour ${eleve} ?`)) {
+      return
+    }
+    try {
+      await api.delete(`/paiements/${id}`)
+      await loadPaiements()
+      await loadStats()
+    } catch (error) {
+      alert('Erreur lors de la suppression du paiement')
     }
   }
 
@@ -89,11 +102,12 @@ export default function Paiements() {
                 <th className="table-header">Montant</th>
                 <th className="table-header">Mode</th>
                 <th className="table-header">Statut</th>
+                <th className="table-header">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {paiements.map((paiement) => (
-                <tr key={paiement._id} className="hover:bg-gray-50">
+                <tr key={paiement.id} className="hover:bg-gray-50">
                   <td className="table-cell">
                     {format(new Date(paiement.datePaiement), 'dd/MM/yyyy')}
                   </td>
@@ -121,6 +135,15 @@ export default function Paiements() {
                     >
                       {paiement.statut}
                     </span>
+                  </td>
+                  <td className="table-cell">
+                    <button
+                      onClick={() => handleDelete(paiement.id, `${paiement.eleve.prenom} ${paiement.eleve.nom}`, paiement.typePaiement)}
+                      className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
                   </td>
                 </tr>
               ))}

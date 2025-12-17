@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import api from '../services/api'
 import { Absence } from '../types'
-import { Plus } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import AbsenceFormModal from '../components/AbsenceFormModal'
 
@@ -22,6 +22,18 @@ export default function Absences() {
       console.error('Erreur lors du chargement des absences', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDelete = async (id: string, eleve: string, date: string) => {
+    if (!confirm(`Voulez-vous vraiment supprimer l'absence de ${eleve} du ${date} ?`)) {
+      return
+    }
+    try {
+      await api.delete(`/absences/${id}`)
+      await loadAbsences()
+    } catch (error) {
+      alert('Erreur lors de la suppression de l\'absence')
     }
   }
 
@@ -72,11 +84,12 @@ export default function Absences() {
                 <th className="table-header">Période</th>
                 <th className="table-header">Statut</th>
                 <th className="table-header">Motif</th>
+                <th className="table-header">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {absences.map((absence) => (
-                <tr key={absence._id} className="hover:bg-gray-50">
+                <tr key={absence.id} className="hover:bg-gray-50">
                   <td className="table-cell font-medium">
                     {format(new Date(absence.date), 'dd/MM/yyyy')}
                   </td>
@@ -97,6 +110,15 @@ export default function Absences() {
                     </span>
                   </td>
                   <td className="table-cell">{absence.motif || '-'}</td>
+                  <td className="table-cell">
+                    <button
+                      onClick={() => handleDelete(absence.id, `${absence.eleve.prenom} ${absence.eleve.nom}`, format(new Date(absence.date), 'dd/MM/yyyy'))}
+                      className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

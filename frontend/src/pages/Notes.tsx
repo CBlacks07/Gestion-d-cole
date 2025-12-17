@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import api from '../services/api'
 import { Note } from '../types'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import NoteFormMultipleModal from '../components/NoteFormMultipleModal'
 
@@ -22,6 +22,18 @@ export default function Notes() {
       console.error('Erreur lors du chargement des notes', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDelete = async (id: string, eleve: string, matiere: string) => {
+    if (!confirm(`Voulez-vous vraiment supprimer cette note de ${matiere} pour ${eleve} ?`)) {
+      return
+    }
+    try {
+      await api.delete(`/notes/${id}`)
+      await loadNotes()
+    } catch (error) {
+      alert('Erreur lors de la suppression de la note')
     }
   }
 
@@ -54,11 +66,12 @@ export default function Notes() {
                 <th className="table-header">Note</th>
                 <th className="table-header">Coefficient</th>
                 <th className="table-header">Date</th>
+                <th className="table-header">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {notes.map((note) => (
-                <tr key={note._id} className="hover:bg-gray-50">
+                <tr key={note.id} className="hover:bg-gray-50">
                   <td className="table-cell">
                     {note.eleve.prenom} {note.eleve.nom}
                   </td>
@@ -81,6 +94,15 @@ export default function Notes() {
                   <td className="table-cell">{note.coefficient}</td>
                   <td className="table-cell">
                     {format(new Date(note.dateEvaluation), 'dd/MM/yyyy')}
+                  </td>
+                  <td className="table-cell">
+                    <button
+                      onClick={() => handleDelete(note.id, `${note.eleve.prenom} ${note.eleve.nom}`, note.matiere.nom)}
+                      className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
                   </td>
                 </tr>
               ))}
