@@ -3,7 +3,7 @@ import api from '../services/api'
 import { Note } from '../types'
 import { Plus, Search } from 'lucide-react'
 import { format } from 'date-fns'
-import NoteFormModal from '../components/NoteFormModal'
+import NoteFormMultipleModal from '../components/NoteFormMultipleModal'
 
 export default function Notes() {
   const [notes, setNotes] = useState<Note[]>([])
@@ -89,8 +89,8 @@ export default function Notes() {
         </div>
       </div>
 
-      {/* Modal pour ajouter une note */}
-      <NoteFormModal
+      {/* Modal pour ajouter des notes */}
+      <NoteFormMultipleModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onSuccess={loadNotes}

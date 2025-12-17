@@ -22,6 +22,8 @@ app.use('/api/notes', require('./routes/note.routes'));
 app.use('/api/absences', require('./routes/absence.routes'));
 app.use('/api/paiements', require('./routes/paiement.routes'));
 app.use('/api/rapports', require('./routes/rapport.routes'));
+app.use('/api/annees', require('./routes/annee.routes'));
+app.use('/api/classe-matieres', require('./routes/classe-matiere.routes'));
 
 // Route de test
 app.get('/', (req, res) => {
