@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import api from '../services/api'
 import { Enseignant } from '../types'
 import { Plus, Search } from 'lucide-react'
+import EnseignantFormModal from '../components/EnseignantFormModal'
 
 export default function Enseignants() {
   const [enseignants, setEnseignants] = useState<Enseignant[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [showAddModal, setShowAddModal] = useState(false)
 
   useEffect(() => {
     loadEnseignants()
@@ -38,7 +40,10 @@ export default function Enseignants() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Enseignants</h1>
-        <button className="btn btn-primary flex items-center">
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="btn btn-primary flex items-center"
+        >
           <Plus className="h-5 w-5 mr-2" />
           Nouvel enseignant
         </button>
@@ -97,6 +102,13 @@ export default function Enseignants() {
           </table>
         </div>
       </div>
+
+      {/* Modal pour ajouter un enseignant */}
+      <EnseignantFormModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSuccess={loadEnseignants}
+      />
     </div>
   )
 }

@@ -3,11 +3,13 @@ import { Link } from 'react-router-dom'
 import api from '../services/api'
 import { Classe } from '../types'
 import { Plus, Eye } from 'lucide-react'
+import ClasseFormModal from '../components/ClasseFormModal'
 
 export default function Classes() {
   const [classes, setClasses] = useState<Classe[]>([])
   const [loading, setLoading] = useState(true)
   const [cycleFilter, setCycleFilter] = useState<string>('')
+  const [showAddModal, setShowAddModal] = useState(false)
 
   useEffect(() => {
     loadClasses()
@@ -44,7 +46,10 @@ export default function Classes() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Classes</h1>
-        <button className="btn btn-primary flex items-center">
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="btn btn-primary flex items-center"
+        >
           <Plus className="h-5 w-5 mr-2" />
           Nouvelle classe
         </button>
@@ -149,6 +154,13 @@ export default function Classes() {
           </div>
         </div>
       ))}
+
+      {/* Modal pour ajouter une classe */}
+      <ClasseFormModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSuccess={loadClasses}
+      />
     </div>
   )
 }

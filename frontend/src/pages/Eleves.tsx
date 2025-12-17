@@ -4,11 +4,13 @@ import api from '../services/api'
 import { Eleve } from '../types'
 import { Plus, Search, Eye } from 'lucide-react'
 import { format } from 'date-fns'
+import EleveFormModal from '../components/EleveFormModal'
 
 export default function Eleves() {
   const [eleves, setEleves] = useState<Eleve[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [showAddModal, setShowAddModal] = useState(false)
 
   useEffect(() => {
     loadEleves()
@@ -40,7 +42,10 @@ export default function Eleves() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Élèves</h1>
-        <button className="btn btn-primary flex items-center">
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="btn btn-primary flex items-center"
+        >
           <Plus className="h-5 w-5 mr-2" />
           Nouvel élève
         </button>
@@ -142,6 +147,13 @@ export default function Eleves() {
           </table>
         </div>
       </div>
+
+      {/* Modal pour ajouter un élève */}
+      <EleveFormModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSuccess={loadEleves}
+      />
     </div>
   )
 }

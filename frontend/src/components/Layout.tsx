@@ -1,5 +1,7 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
+import { useState } from 'react'
 import { useAuthStore } from '../store/authStore'
+import ConfirmDialog from './ConfirmDialog'
 import {
   LayoutDashboard,
   Users,
@@ -26,6 +28,12 @@ const navigation = [
 export default function Layout() {
   const location = useLocation()
   const { user, logout } = useAuthStore()
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+
+  const handleLogout = () => {
+    logout()
+    window.location.href = '/login'
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -63,8 +71,9 @@ export default function Layout() {
               <p className="text-xs text-primary-200">{user?.role}</p>
             </div>
             <button
-              onClick={logout}
+              onClick={() => setShowLogoutConfirm(true)}
               className="p-2 hover:bg-primary-700 rounded-lg transition-colors"
+              title="Déconnexion"
             >
               <LogOut className="h-5 w-5" />
             </button>
@@ -78,6 +87,18 @@ export default function Layout() {
           <Outlet />
         </div>
       </div>
+
+      {/* Logout confirmation */}
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={handleLogout}
+        title="Confirmer la déconnexion"
+        message="Êtes-vous sûr de vouloir vous déconnecter ?"
+        confirmText="Se déconnecter"
+        cancelText="Annuler"
+        type="warning"
+      />
     </div>
   )
 }
