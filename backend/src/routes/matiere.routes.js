@@ -1,23 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const {
-  getMatieres,
-  getMatiereById,
-  createMatiere,
-  updateMatiere,
-  deleteMatiere
-} = require('../controllers/matiere.controller');
-const { protect, authorize } = require('../middleware/auth');
+const matiereController = require('../controllers/matiere.controller');
+const { protect } = require('../middleware/auth');
 
+// Toutes les routes nécessitent une authentification
 router.use(protect);
 
-router.route('/')
-  .get(getMatieres)
-  .post(authorize('admin', 'directeur'), createMatiere);
-
-router.route('/:id')
-  .get(getMatiereById)
-  .put(authorize('admin', 'directeur'), updateMatiere)
-  .delete(authorize('admin', 'directeur'), deleteMatiere);
+// Routes CRUD pour les matières
+router.get('/', matiereController.getMatieres);
+router.get('/:id', matiereController.getMatiereById);
+router.post('/', matiereController.createMatiere);
+router.put('/:id', matiereController.updateMatiere);
+router.delete('/:id', matiereController.deleteMatiere);
 
 module.exports = router;

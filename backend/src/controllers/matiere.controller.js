@@ -1,14 +1,15 @@
 const { query } = require('../lib/db');
 
+// @desc    Obtenir toutes les matières
+// @route   GET /api/matieres
 exports.getMatieres = async (req, res) => {
   try {
     const { cycle, niveau } = req.query;
-
+    
     let sql = 'SELECT * FROM matieres WHERE 1=1';
     const params = [];
     let paramIndex = 1;
 
-    // Pour les arrays PostgreSQL, utiliser l'opérateur @> (contains)
     if (cycle) {
       sql += ` AND $${paramIndex} = ANY(cycles)`;
       params.push(cycle.toUpperCase());
@@ -26,10 +27,13 @@ exports.getMatieres = async (req, res) => {
     const result = await query(sql, params);
     res.json(result.rows);
   } catch (error) {
+    console.error('Erreur lors de la récupération des matières:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
+// @desc    Obtenir une matière par ID
+// @route   GET /api/matieres/:id
 exports.getMatiereById = async (req, res) => {
   try {
     const result = await query(
@@ -43,23 +47,20 @@ exports.getMatiereById = async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (error) {
+    console.error('Erreur lors de la récupération de la matière:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
+// @desc    Créer une nouvelle matière
+// @route   POST /api/matieres
 exports.createMatiere = async (req, res) => {
   try {
-    const data = { ...req.body };
+    const { nom, code, description, coefficient, niveaux, cycles, couleur } = req.body;
 
-    // Convertir les enums en majuscules pour les arrays
-    let cycles = [];
-    if (data.cycles && Array.isArray(data.cycles)) {
-      cycles = data.cycles.map(c => c.toUpperCase());
-    }
-
-    let niveaux = [];
-    if (data.niveaux && Array.isArray(data.niveaux)) {
-      niveaux = data.niveaux.map(n => n.toUpperCase());
+    // Validation
+    if (!nom || !code) {
+      return res.status(400).json({ message: 'Le nom et le code sont obligatoires' });
     }
 
     const result = await query(
@@ -67,82 +68,40 @@ exports.createMatiere = async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [
-        data.nom,
-        data.code,
-        data.description,
-        data.coefficient,
-        niveaux,
-        cycles,
-        data.couleur
+        nom,
+        code,
+        description || null,
+        coefficient || 1,
+        niveaux || [],
+        cycles || [],
+        couleur || '#3B82F6'
       ]
     );
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Erreur lors de la création de la matière:', error);
+    if (error.code === '23505') {
+      return res.status(400).json({ message: 'Ce code de matière existe déjà' });
+    }
+    res.status(500).json({ message: error.message });
   }
 };
 
+// @desc    Mettre à jour une matière
+// @route   PUT /api/matieres/:id
 exports.updateMatiere = async (req, res) => {
   try {
-    const data = { ...req.body };
+    const { nom, code, description, coefficient, niveaux, cycles, couleur } = req.body;
 
-    // Construire la requête dynamiquement
-    const fields = [];
-    const values = [];
-    let paramIndex = 1;
-
-    if (data.nom !== undefined) {
-      fields.push(`nom = $${paramIndex}`);
-      values.push(data.nom);
-      paramIndex++;
-    }
-
-    if (data.code !== undefined) {
-      fields.push(`code = $${paramIndex}`);
-      values.push(data.code);
-      paramIndex++;
-    }
-
-    if (data.description !== undefined) {
-      fields.push(`description = $${paramIndex}`);
-      values.push(data.description);
-      paramIndex++;
-    }
-
-    if (data.coefficient !== undefined) {
-      fields.push(`coefficient = $${paramIndex}`);
-      values.push(data.coefficient);
-      paramIndex++;
-    }
-
-    if (data.niveaux !== undefined && Array.isArray(data.niveaux)) {
-      fields.push(`niveaux = $${paramIndex}`);
-      values.push(data.niveaux.map(n => n.toUpperCase()));
-      paramIndex++;
-    }
-
-    if (data.cycles !== undefined && Array.isArray(data.cycles)) {
-      fields.push(`cycles = $${paramIndex}`);
-      values.push(data.cycles.map(c => c.toUpperCase()));
-      paramIndex++;
-    }
-
-    if (data.couleur !== undefined) {
-      fields.push(`couleur = $${paramIndex}`);
-      values.push(data.couleur);
-      paramIndex++;
-    }
-
-    if (fields.length === 0) {
-      return res.status(400).json({ message: 'Aucune donnée à mettre à jour' });
-    }
-
-    fields.push(`updated_at = NOW()`);
-    values.push(req.params.id);
-
-    const sql = `UPDATE matieres SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
-    const result = await query(sql, values);
+    const result = await query(
+      `UPDATE matieres 
+       SET nom = $1, code = $2, description = $3, coefficient = $4, 
+           niveaux = $5, cycles = $6, couleur = $7, updated_at = NOW()
+       WHERE id = $8
+       RETURNING *`,
+      [nom, code, description, coefficient, niveaux, cycles, couleur, req.params.id]
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Matière non trouvée' });
@@ -150,10 +109,16 @@ exports.updateMatiere = async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Erreur lors de la mise à jour de la matière:', error);
+    if (error.code === '23505') {
+      return res.status(400).json({ message: 'Ce code de matière existe déjà' });
+    }
+    res.status(500).json({ message: error.message });
   }
 };
 
+// @desc    Supprimer une matière
+// @route   DELETE /api/matieres/:id
 exports.deleteMatiere = async (req, res) => {
   try {
     const result = await query(
@@ -167,6 +132,7 @@ exports.deleteMatiere = async (req, res) => {
 
     res.json({ message: 'Matière supprimée avec succès' });
   } catch (error) {
+    console.error('Erreur lors de la suppression de la matière:', error);
     res.status(500).json({ message: error.message });
   }
 };
