@@ -3,11 +3,13 @@ import api from '../services/api'
 import { Paiement } from '../types'
 import { Plus, DollarSign } from 'lucide-react'
 import { format } from 'date-fns'
+import PaiementFormModal from '../components/PaiementFormModal'
 
 export default function Paiements() {
   const [paiements, setPaiements] = useState<Paiement[]>([])
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [showAddModal, setShowAddModal] = useState(false)
 
   useEffect(() => {
     loadPaiements()
@@ -42,7 +44,10 @@ export default function Paiements() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Paiements</h1>
-        <button className="btn btn-primary flex items-center">
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="btn btn-primary flex items-center"
+        >
           <Plus className="h-5 w-5 mr-2" />
           Nouveau paiement
         </button>
@@ -123,6 +128,16 @@ export default function Paiements() {
           </table>
         </div>
       </div>
+
+      {/* Modal pour ajouter un paiement */}
+      <PaiementFormModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSuccess={() => {
+          loadPaiements()
+          loadStats()
+        }}
+      />
     </div>
   )
 }

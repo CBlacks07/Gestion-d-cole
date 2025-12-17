@@ -3,10 +3,12 @@ import api from '../services/api'
 import { Note } from '../types'
 import { Plus, Search } from 'lucide-react'
 import { format } from 'date-fns'
+import NoteFormModal from '../components/NoteFormModal'
 
 export default function Notes() {
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(true)
+  const [showAddModal, setShowAddModal] = useState(false)
 
   useEffect(() => {
     loadNotes()
@@ -31,7 +33,10 @@ export default function Notes() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Notes et Évaluations</h1>
-        <button className="btn btn-primary flex items-center">
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="btn btn-primary flex items-center"
+        >
           <Plus className="h-5 w-5 mr-2" />
           Nouvelle note
         </button>
@@ -83,6 +88,13 @@ export default function Notes() {
           </table>
         </div>
       </div>
+
+      {/* Modal pour ajouter une note */}
+      <NoteFormModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSuccess={loadNotes}
+      />
     </div>
   )
 }
