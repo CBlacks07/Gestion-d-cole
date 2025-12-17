@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import api from '../services/api'
-import { Classe } from '../types'
+import { Classe, Eleve } from '../types'
 
 interface EleveFormModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
+  eleve?: Eleve | null
 }
 
-export default function EleveFormModal({ isOpen, onClose, onSuccess }: EleveFormModalProps) {
+export default function EleveFormModal({ isOpen, onClose, onSuccess, eleve }: EleveFormModalProps) {
   const [loading, setLoading] = useState(false)
   const [classes, setClasses] = useState<Classe[]>([])
   const [formData, setFormData] = useState({
@@ -34,8 +35,29 @@ export default function EleveFormModal({ isOpen, onClose, onSuccess }: EleveForm
   useEffect(() => {
     if (isOpen) {
       loadClasses()
+      if (eleve) {
+        // Mode édition - pré-remplir le formulaire
+        setFormData({
+          nom: eleve.nom,
+          prenom: eleve.prenom,
+          dateNaissance: eleve.dateNaissance?.split('T')[0] || '',
+          lieuNaissance: eleve.lieuNaissance,
+          sexe: eleve.sexe,
+          classeId: eleve.classe?.id || '',
+          tuteur: eleve.tuteur || {
+            nom: '',
+            prenom: '',
+            telephone: '',
+            email: '',
+            profession: '',
+            adresse: ''
+          },
+          groupeSanguin: eleve.groupeSanguin || '',
+          statut: eleve.statut
+        })
+      }
     }
-  }, [isOpen])
+  }, [isOpen, eleve])
 
   const loadClasses = async () => {
     try {
@@ -54,17 +76,24 @@ export default function EleveFormModal({ isOpen, onClose, onSuccess }: EleveForm
       const data = {
         ...formData,
         classe: formData.classeId || undefined,
-        anneeScolaire: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
-        dateInscription: new Date().toISOString()
+        anneeScolaire: eleve?.anneeScolaire || (new Date().getFullYear() + '-' + (new Date().getFullYear() + 1)),
+        dateInscription: eleve?.dateInscription || new Date().toISOString()
       }
 
-      await api.post('/eleves', data)
+      if (eleve) {
+        // Mode édition
+        await api.put(`/eleves/${eleve.id}`, data)
+      } else {
+        // Mode création
+        await api.post('/eleves', data)
+      }
+
       onSuccess()
       onClose()
       resetForm()
     } catch (error: any) {
-      console.error('Erreur lors de la création de l\'élève', error)
-      alert(error.response?.data?.message || 'Erreur lors de la création de l\'élève')
+      console.error(`Erreur lors de ${eleve ? 'la modification' : 'la création'} de l'élève`, error)
+      alert(error.response?.data?.message || `Erreur lors de ${eleve ? 'la modification' : 'la création'} de l'élève`)
     } finally {
       setLoading(false)
     }
@@ -92,7 +121,7 @@ export default function EleveFormModal({ isOpen, onClose, onSuccess }: EleveForm
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Ajouter un nouvel élève" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title={eleve ? "Modifier l'élève" : "Ajouter un nouvel élève"} size="lg">
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Informations personnelles */}
         <div>
@@ -334,7 +363,7 @@ export default function EleveFormModal({ isOpen, onClose, onSuccess }: EleveForm
             className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors disabled:opacity-50"
             disabled={loading}
           >
-            {loading ? 'Enregistrement...' : 'Enregistrer'}
+            {loading ? (eleve ? 'Modification...' : 'Enregistrement...') : (eleve ? 'Modifier' : 'Enregistrer')}
           </button>
         </div>
       </form>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../services/api'
 import { Eleve } from '../types'
-import { Plus, Search, Eye } from 'lucide-react'
+import { Plus, Search, Eye, Edit2, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import EleveFormModal from '../components/EleveFormModal'
 
@@ -11,6 +11,7 @@ export default function Eleves() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [editingEleve, setEditingEleve] = useState<Eleve | null>(null)
 
   useEffect(() => {
     loadEleves()
@@ -36,6 +37,18 @@ export default function Eleves() {
       return format(date, 'dd/MM/yyyy')
     } catch {
       return '-'
+    }
+  }
+
+  const handleDelete = async (id: string, nom: string, prenom: string) => {
+    if (!confirm(`Voulez-vous vraiment supprimer l'élève ${nom} ${prenom} ?`)) {
+      return
+    }
+    try {
+      await api.delete(`/eleves/${id}`)
+      await loadEleves()
+    } catch (error) {
+      alert('Erreur lors de la suppression de l\'élève')
     }
   }
 
@@ -146,12 +159,29 @@ export default function Eleves() {
                     </span>
                   </td>
                   <td className="table-cell">
-                    <Link
-                      to={`/eleves/${eleve.id}`}
-                      className="text-primary-600 hover:text-primary-700"
-                    >
-                      <Eye className="h-5 w-5" />
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/eleves/${eleve.id}`}
+                        className="p-1 text-primary-600 hover:bg-primary-100 rounded transition-colors"
+                        title="Voir détails"
+                      >
+                        <Eye className="h-5 w-5" />
+                      </Link>
+                      <button
+                        onClick={() => setEditingEleve(eleve)}
+                        className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                        title="Modifier"
+                      >
+                        <Edit2 className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(eleve.id, eleve.nom, eleve.prenom)}
+                        className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                        title="Supprimer"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -165,6 +195,17 @@ export default function Eleves() {
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onSuccess={loadEleves}
+      />
+
+      {/* Modal pour modifier un élève */}
+      <EleveFormModal
+        isOpen={!!editingEleve}
+        onClose={() => setEditingEleve(null)}
+        onSuccess={() => {
+          loadEleves()
+          setEditingEleve(null)
+        }}
+        eleve={editingEleve}
       />
     </div>
   )
