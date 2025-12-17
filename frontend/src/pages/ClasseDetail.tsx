@@ -1,25 +1,90 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import api from '../services/api'
-import { Users } from 'lucide-react'
+import { Users, Plus, Trash2, BookOpen } from 'lucide-react'
 
 export default function ClasseDetail() {
   const { id } = useParams()
   const [classe, setClasse] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [matieres, setMatieres] = useState<any[]>([])
+  const [allMatieres, setAllMatieres] = useState<any[]>([])
+  const [anneeActive, setAnneeActive] = useState<any>(null)
+  const [showAddMatiere, setShowAddMatiere] = useState(false)
+  const [newMatiere, setNewMatiere] = useState({
+    matiere_id: '',
+    coefficient: 1
+  })
 
   useEffect(() => {
-    loadClasse()
+    loadData()
   }, [id])
 
-  const loadClasse = async () => {
+  const loadData = async () => {
     try {
-      const response = await api.get(`/classes/${id}`)
-      setClasse(response.data)
+      const [classeRes, anneeRes] = await Promise.all([
+        api.get(`/classes/${id}`),
+        api.get('/annees/active')
+      ])
+      setClasse(classeRes.data)
+      setAnneeActive(anneeRes.data)
+
+      // Charger les matières de la classe
+      await loadMatieresClasse(anneeRes.data.annee)
+
+      // Charger toutes les matières disponibles
+      const matieresRes = await api.get('/matieres')
+      setAllMatieres(matieresRes.data)
     } catch (error) {
-      console.error('Erreur lors du chargement de la classe', error)
+      console.error('Erreur lors du chargement des données', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadMatieresClasse = async (annee: string) => {
+    try {
+      const response = await api.get(`/classe-matieres/classe/${id}`, {
+        params: { annee_scolaire: annee }
+      })
+      setMatieres(response.data)
+    } catch (error) {
+      console.error('Erreur lors du chargement des matières', error)
+    }
+  }
+
+  const handleAddMatiere = async () => {
+    if (!newMatiere.matiere_id) {
+      alert('Veuillez sélectionner une matière')
+      return
+    }
+
+    try {
+      await api.post('/classe-matieres', {
+        classe_id: id,
+        matiere_id: newMatiere.matiere_id,
+        coefficient: newMatiere.coefficient,
+        annee_scolaire: anneeActive?.annee
+      })
+
+      await loadMatieresClasse(anneeActive?.annee)
+      setNewMatiere({ matiere_id: '', coefficient: 1 })
+      setShowAddMatiere(false)
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Erreur lors de l\'ajout de la matière')
+    }
+  }
+
+  const handleRemoveMatiere = async (matiereId: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir retirer cette matière de la classe ?')) {
+      return
+    }
+
+    try {
+      await api.delete(`/classe-matieres/${matiereId}`)
+      await loadMatieresClasse(anneeActive?.annee)
+    } catch (error) {
+      alert('Erreur lors de la suppression')
     }
   }
 
@@ -30,6 +95,11 @@ export default function ClasseDetail() {
   if (!classe) {
     return <div className="text-center py-12">Classe non trouvée</div>
   }
+
+  // Filtrer les matières déjà ajoutées
+  const matieresDisponibles = allMatieres.filter(
+    m => !matieres.some(cm => cm.matiere_id === m.id)
+  )
 
   return (
     <div>
@@ -76,6 +146,100 @@ export default function ClasseDetail() {
         </div>
       </div>
 
+      {/* Section Matières */}
+      <div className="card mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold flex items-center">
+            <BookOpen className="h-5 w-5 mr-2" />
+            Matières de la classe
+          </h2>
+          <button
+            onClick={() => setShowAddMatiere(!showAddMatiere)}
+            className="btn btn-primary btn-sm flex items-center"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Ajouter une matière
+          </button>
+        </div>
+
+        {showAddMatiere && (
+          <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <select
+                  className="input"
+                  value={newMatiere.matiere_id}
+                  onChange={(e) => setNewMatiere({ ...newMatiere, matiere_id: e.target.value })}
+                >
+                  <option value="">Sélectionner une matière...</option>
+                  {matieresDisponibles.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nom}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <input
+                  type="number"
+                  min="1"
+                  className="input"
+                  placeholder="Coefficient"
+                  value={newMatiere.coefficient}
+                  onChange={(e) => setNewMatiere({ ...newMatiere, coefficient: parseInt(e.target.value) })}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button onClick={handleAddMatiere} className="btn btn-primary btn-sm">
+                Ajouter
+              </button>
+              <button onClick={() => setShowAddMatiere(false)} className="btn btn-secondary btn-sm">
+                Annuler
+              </button>
+            </div>
+          </div>
+        )}
+
+        {matieres.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {matieres.map((matiere) => (
+              <div
+                key={matiere.id}
+                className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
+                style={{ borderLeftColor: matiere.couleur, borderLeftWidth: '4px' }}
+              >
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900">{matiere.nom}</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Coefficient: <span className="font-medium">{matiere.coefficient}</span>
+                    </p>
+                    {matiere.enseignant_nom && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        Enseignant: {matiere.enseignant_prenom} {matiere.enseignant_nom}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleRemoveMatiere(matiere.id)}
+                    className="text-red-600 hover:text-red-700 p-1"
+                    title="Retirer de la classe"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-gray-500 py-8">
+            Aucune matière assignée à cette classe
+          </p>
+        )}
+      </div>
+
+      {/* Section Élèves */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">Liste des élèves</h2>
