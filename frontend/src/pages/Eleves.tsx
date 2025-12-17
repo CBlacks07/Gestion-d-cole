@@ -27,6 +27,18 @@ export default function Eleves() {
     }
   }
 
+  // Helper function to safely format dates
+  const formatDate = (dateString: string | null | undefined): string => {
+    if (!dateString) return '-'
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return '-'
+      return format(date, 'dd/MM/yyyy')
+    } catch {
+      return '-'
+    }
+  }
+
   const filteredEleves = eleves.filter(
     (eleve) =>
       eleve.nom.toLowerCase().includes(search.toLowerCase()) ||
@@ -119,7 +131,7 @@ export default function Eleves() {
                     </span>
                   </td>
                   <td className="table-cell">
-                    {format(new Date(eleve.dateNaissance), 'dd/MM/yyyy')}
+                    {formatDate(eleve.dateNaissance)}
                   </td>
                   <td className="table-cell">{eleve.classe?.nom || '-'}</td>
                   <td className="table-cell">
