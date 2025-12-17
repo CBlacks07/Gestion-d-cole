@@ -1,9 +1,20 @@
 const { Pool } = require('pg');
 
 // Configuration de la connexion PostgreSQL
+// Utilise soit DATABASE_URL soit les variables individuelles
+const poolConfig = process.env.DATABASE_URL
+  ? { connectionString: process.env.DATABASE_URL }
+  : {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432'),
+      database: process.env.DB_NAME || 'Ecole',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || 'Admin123',
+    };
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  // Options supplémentaires pour la production
+  ...poolConfig,
+  // Options supplémentaires
   max: 20, // Nombre maximum de clients dans le pool
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
