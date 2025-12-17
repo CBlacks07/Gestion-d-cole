@@ -28,7 +28,7 @@ const query = async (text, params) => {
 
     return res;
   } catch (error) {
-    console.error('Erreur lors de l'exécution de la requête:', error);
+    console.error('Erreur lors de la requete:', error);
     throw error;
   }
 };
