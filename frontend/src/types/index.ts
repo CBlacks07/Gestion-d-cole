@@ -1,5 +1,5 @@
 export interface Eleve {
-  _id: string
+  id: string
   matricule: string
   nom: string
   prenom: string
@@ -25,7 +25,7 @@ export interface Eleve {
 }
 
 export interface Enseignant {
-  _id: string
+  id: string
   matricule: string
   nom: string
   prenom: string
@@ -49,7 +49,7 @@ export interface Enseignant {
 }
 
 export interface Classe {
-  _id: string
+  id: string
   nom: string
   niveau: string
   cycle: 'Primaire' | 'Collège' | 'Lycée'
@@ -67,7 +67,7 @@ export interface Classe {
 }
 
 export interface Matiere {
-  _id: string
+  id: string
   nom: string
   code: string
   description?: string
@@ -78,7 +78,7 @@ export interface Matiere {
 }
 
 export interface Note {
-  _id: string
+  id: string
   eleve: Eleve
   matiere: Matiere
   classe: Classe
@@ -94,7 +94,7 @@ export interface Note {
 }
 
 export interface Absence {
-  _id: string
+  id: string
   eleve: Eleve
   classe: Classe
   date: string
@@ -107,7 +107,7 @@ export interface Absence {
 }
 
 export interface Paiement {
-  _id: string
+  id: string
   eleve: Eleve
   typePaiement: 'Inscription' | 'Scolarité' | 'Cantine' | 'Transport' | 'Uniforme' | 'Autres'
   montant: number

@@ -115,7 +115,7 @@ export default function Eleves() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredEleves.map((eleve) => (
-                <tr key={eleve._id} className="hover:bg-gray-50">
+                <tr key={eleve.id} className="hover:bg-gray-50">
                   <td className="table-cell font-medium">{eleve.matricule}</td>
                   <td className="table-cell">{eleve.nom}</td>
                   <td className="table-cell">{eleve.prenom}</td>
@@ -147,7 +147,7 @@ export default function Eleves() {
                   </td>
                   <td className="table-cell">
                     <Link
-                      to={`/eleves/${eleve._id}`}
+                      to={`/eleves/${eleve.id}`}
                       className="text-primary-600 hover:text-primary-700"
                     >
                       <Eye className="h-5 w-5" />
