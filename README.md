@@ -29,10 +29,10 @@ Application complète de gestion scolaire adaptée au système éducatif togolai
 
 ## 🚀 Technologies
 
-- **Backend** : Node.js, Express, MongoDB
-- **Frontend** : React, TypeScript, Tailwind CSS
-- **Authentification** : JWT
-- **Documentation API** : Swagger
+- **Backend** : Node.js, Express, PostgreSQL, Prisma ORM
+- **Frontend** : React, TypeScript, Tailwind CSS, Vite
+- **Authentification** : JWT avec bcrypt
+- **Base de données** : PostgreSQL 14+
 
 ## 📦 Installation
 

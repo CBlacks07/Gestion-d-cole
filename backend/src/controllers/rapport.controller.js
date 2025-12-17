@@ -1,50 +1,56 @@
-const Eleve = require('../models/Eleve');
-const Classe = require('../models/Classe');
-const Note = require('../models/Note');
-const Absence = require('../models/Absence');
-const Paiement = require('../models/Paiement');
+const prisma = require('../lib/prisma');
 
 // Tableau de bord général
 exports.getDashboard = async (req, res) => {
   try {
     const { anneeScolaire } = req.query;
-    const query = anneeScolaire ? { anneeScolaire } : {};
+    const whereEleve = anneeScolaire ? { anneeScolaire, statut: 'ACTIF' } : { statut: 'ACTIF' };
+    const whereClasse = anneeScolaire ? { anneeScolaire } : {};
 
-    const totalEleves = await Eleve.countDocuments({ ...query, statut: 'actif' });
-    const totalClasses = await Classe.countDocuments(query);
+    const totalEleves = await prisma.eleve.count({ where: whereEleve });
+    const totalClasses = await prisma.classe.count({ where: whereClasse });
 
-    const elevesParCycle = await Eleve.aggregate([
-      { $match: { statut: 'actif' } },
-      {
-        $lookup: {
-          from: 'classes',
-          localField: 'classe',
-          foreignField: '_id',
-          as: 'classeInfo'
-        }
-      },
-      { $unwind: '$classeInfo' },
-      {
-        $group: {
-          _id: '$classeInfo.cycle',
-          count: { $sum: 1 }
+    // Récupérer tous les élèves actifs avec leur classe
+    const elevesAvecClasse = await prisma.eleve.findMany({
+      where: { statut: 'ACTIF' },
+      include: {
+        classe: {
+          select: {
+            cycle: true
+          }
         }
       }
-    ]);
+    });
 
-    const paiementsQuery = { statut: 'Validé' };
-    if (anneeScolaire) paiementsQuery.anneeScolaire = anneeScolaire;
+    // Grouper par cycle
+    const elevesParCycle = elevesAvecClasse.reduce((acc, eleve) => {
+      if (eleve.classe) {
+        const cycle = eleve.classe.cycle;
+        const existing = acc.find(item => item._id === cycle);
+        if (existing) {
+          existing.count++;
+        } else {
+          acc.push({ _id: cycle, count: 1 });
+        }
+      }
+      return acc;
+    }, []);
 
-    const recettesTotal = await Paiement.aggregate([
-      { $match: paiementsQuery },
-      { $group: { _id: null, total: { $sum: '$montant' } } }
-    ]);
+    const paiementsWhere = { statut: 'VALIDE' };
+    if (anneeScolaire) paiementsWhere.anneeScolaire = anneeScolaire;
+
+    const recettesTotalResult = await prisma.paiement.aggregate({
+      where: paiementsWhere,
+      _sum: {
+        montant: true
+      }
+    });
 
     res.json({
       totalEleves,
       totalClasses,
       elevesParCycle,
-      recettesTotal: recettesTotal[0]?.total || 0,
+      recettesTotal: Number(recettesTotalResult._sum.montant || 0),
       devise: 'XOF'
     });
   } catch (error) {
@@ -58,35 +64,46 @@ exports.getRapportClasse = async (req, res) => {
     const { classeId } = req.params;
     const { periode, anneeScolaire } = req.query;
 
-    const classe = await Classe.findById(classeId)
-      .populate('enseignantPrincipal');
+    const classe = await prisma.classe.findUnique({
+      where: { id: classeId },
+      include: {
+        enseignantPrincipal: true
+      }
+    });
 
     if (!classe) {
       return res.status(404).json({ message: 'Classe non trouvée' });
     }
 
-    const eleves = await Eleve.find({
-      classe: classeId,
-      statut: 'actif'
+    const eleves = await prisma.eleve.findMany({
+      where: {
+        classeId: classeId,
+        statut: 'ACTIF'
+      }
     });
 
-    const elevesIds = eleves.map(e => e._id);
+    const elevesIds = eleves.map(e => e.id);
 
     // Notes moyennes par élève
-    const notesQuery = {
-      eleve: { $in: elevesIds },
-      classe: classeId
+    const notesWhere = {
+      eleveId: { in: elevesIds },
+      classeId: classeId
     };
 
-    if (periode) notesQuery.periode = periode;
-    if (anneeScolaire) notesQuery.anneeScolaire = anneeScolaire;
+    if (periode) notesWhere.periode = periode.toUpperCase();
+    if (anneeScolaire) notesWhere.anneeScolaire = anneeScolaire;
 
-    const notes = await Note.find(notesQuery).populate('matiere');
+    const notes = await prisma.note.findMany({
+      where: notesWhere,
+      include: {
+        matiere: true
+      }
+    });
 
     // Calculer les moyennes
     const moyennesParEleve = {};
     notes.forEach(note => {
-      const eleveId = note.eleve.toString();
+      const eleveId = note.eleveId;
       if (!moyennesParEleve[eleveId]) {
         moyennesParEleve[eleveId] = {
           totalPoints: 0,
@@ -95,23 +112,23 @@ exports.getRapportClasse = async (req, res) => {
         };
       }
       const coef = note.matiere.coefficient;
-      moyennesParEleve[eleveId].totalPoints += note.note * coef;
+      moyennesParEleve[eleveId].totalPoints += Number(note.note) * coef;
       moyennesParEleve[eleveId].totalCoef += coef;
       moyennesParEleve[eleveId].notes.push(note);
     });
 
     const elevesAvecMoyennes = eleves.map(eleve => {
-      const stats = moyennesParEleve[eleve._id.toString()];
+      const stats = moyennesParEleve[eleve.id];
       const moyenne = stats && stats.totalCoef > 0
         ? (stats.totalPoints / stats.totalCoef).toFixed(2)
         : 0;
 
       return {
-        ...eleve.toObject(),
+        ...eleve,
         moyenne,
         nombreNotes: stats?.notes.length || 0
       };
-    }).sort((a, b) => b.moyenne - a.moyenne);
+    }).sort((a, b) => parseFloat(b.moyenne) - parseFloat(a.moyenne));
 
     const moyenneClasse = elevesAvecMoyennes.length > 0
       ? (elevesAvecMoyennes.reduce((sum, e) => sum + parseFloat(e.moyenne), 0) / elevesAvecMoyennes.length).toFixed(2)
@@ -133,42 +150,55 @@ exports.getRapportFinancier = async (req, res) => {
   try {
     const { anneeScolaire, mois } = req.query;
 
-    let query = { statut: 'Validé' };
-    if (anneeScolaire) query.anneeScolaire = anneeScolaire;
-    if (mois) query.moisConcerne = mois;
+    let where = { statut: 'VALIDE' };
+    if (anneeScolaire) where.anneeScolaire = anneeScolaire;
+    if (mois) where.moisConcerne = mois;
 
-    const paiements = await Paiement.find(query).populate('eleve');
-
-    const totalRecettes = paiements.reduce((sum, p) => sum + p.montant, 0);
-
-    const parType = await Paiement.aggregate([
-      { $match: query },
-      {
-        $group: {
-          _id: '$typePaiement',
-          total: { $sum: '$montant' },
-          count: { $sum: 1 }
-        }
+    const paiements = await prisma.paiement.findMany({
+      where,
+      include: {
+        eleve: true
       }
-    ]);
+    });
 
-    const parModePaiement = await Paiement.aggregate([
-      { $match: query },
-      {
-        $group: {
-          _id: '$modePaiement',
-          total: { $sum: '$montant' },
-          count: { $sum: 1 }
-        }
+    const totalRecettes = paiements.reduce((sum, p) => sum + Number(p.montant), 0);
+
+    const parType = await prisma.paiement.groupBy({
+      by: ['typePaiement'],
+      where,
+      _sum: {
+        montant: true
+      },
+      _count: {
+        typePaiement: true
       }
-    ]);
+    });
+
+    const parModePaiement = await prisma.paiement.groupBy({
+      by: ['modePaiement'],
+      where,
+      _sum: {
+        montant: true
+      },
+      _count: {
+        modePaiement: true
+      }
+    });
 
     res.json({
       totalRecettes,
       nombrePaiements: paiements.length,
       devise: 'XOF',
-      parType,
-      parModePaiement,
+      parType: parType.map(item => ({
+        _id: item.typePaiement,
+        total: Number(item._sum.montant || 0),
+        count: item._count.typePaiement
+      })),
+      parModePaiement: parModePaiement.map(item => ({
+        _id: item.modePaiement,
+        total: Number(item._sum.montant || 0),
+        count: item._count.modePaiement
+      })),
       paiements
     });
   } catch (error) {
@@ -181,16 +211,20 @@ exports.getRapportAssiduite = async (req, res) => {
   try {
     const { classeId, anneeScolaire } = req.query;
 
-    let query = {};
-    if (classeId) query.classe = classeId;
-    if (anneeScolaire) query.anneeScolaire = anneeScolaire;
+    let where = {};
+    if (classeId) where.classeId = classeId;
+    if (anneeScolaire) where.anneeScolaire = anneeScolaire;
 
-    const absences = await Absence.find(query)
-      .populate('eleve');
+    const absences = await prisma.absence.findMany({
+      where,
+      include: {
+        eleve: true
+      }
+    });
 
     const absencesParEleve = {};
     absences.forEach(absence => {
-      const eleveId = absence.eleve._id.toString();
+      const eleveId = absence.eleve.id;
       if (!absencesParEleve[eleveId]) {
         absencesParEleve[eleveId] = {
           eleve: absence.eleve,

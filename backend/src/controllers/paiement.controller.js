@@ -1,20 +1,28 @@
-const Paiement = require('../models/Paiement');
-const Eleve = require('../models/Eleve');
+const prisma = require('../lib/prisma');
 
 exports.getPaiements = async (req, res) => {
   try {
     const { eleve, typePaiement, anneeScolaire, statut } = req.query;
-    let query = {};
+    let where = {};
 
-    if (eleve) query.eleve = eleve;
-    if (typePaiement) query.typePaiement = typePaiement;
-    if (anneeScolaire) query.anneeScolaire = anneeScolaire;
-    if (statut) query.statut = statut;
+    if (eleve) where.eleveId = eleve;
+    if (typePaiement) where.typePaiement = typePaiement.toUpperCase();
+    if (anneeScolaire) where.anneeScolaire = anneeScolaire;
+    if (statut) where.statut = statut.toUpperCase();
 
-    const paiements = await Paiement.find(query)
-      .populate('eleve')
-      .populate('enregistrePar', 'nom prenom')
-      .sort({ datePaiement: -1 });
+    const paiements = await prisma.paiement.findMany({
+      where,
+      include: {
+        eleve: true,
+        enregistrePar: {
+          select: {
+            nom: true,
+            prenom: true
+          }
+        }
+      },
+      orderBy: { datePaiement: 'desc' }
+    });
 
     res.json(paiements);
   } catch (error) {
@@ -24,9 +32,13 @@ exports.getPaiements = async (req, res) => {
 
 exports.getPaiementById = async (req, res) => {
   try {
-    const paiement = await Paiement.findById(req.params.id)
-      .populate('eleve')
-      .populate('enregistrePar');
+    const paiement = await prisma.paiement.findUnique({
+      where: { id: req.params.id },
+      include: {
+        eleve: true,
+        enregistrePar: true
+      }
+    });
 
     if (!paiement) {
       return res.status(404).json({ message: 'Paiement non trouvé' });
@@ -40,12 +52,23 @@ exports.getPaiementById = async (req, res) => {
 
 exports.createPaiement = async (req, res) => {
   try {
-    const paiement = await Paiement.create({
+    const data = {
       ...req.body,
-      enregistrePar: req.user._id
+      enregistreParId: req.user.id
+    };
+
+    // Convertir les enums en majuscules
+    if (data.typePaiement) data.typePaiement = data.typePaiement.toUpperCase();
+    if (data.modePaiement) data.modePaiement = data.modePaiement.toUpperCase();
+    if (data.statut) data.statut = data.statut.toUpperCase();
+
+    const paiement = await prisma.paiement.create({
+      data,
+      include: {
+        eleve: true
+      }
     });
 
-    await paiement.populate('eleve');
     res.status(201).json(paiement);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -54,32 +77,38 @@ exports.createPaiement = async (req, res) => {
 
 exports.updatePaiement = async (req, res) => {
   try {
-    const paiement = await Paiement.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const data = { ...req.body };
 
-    if (!paiement) {
-      return res.status(404).json({ message: 'Paiement non trouvé' });
-    }
+    // Convertir les enums en majuscules
+    if (data.typePaiement) data.typePaiement = data.typePaiement.toUpperCase();
+    if (data.modePaiement) data.modePaiement = data.modePaiement.toUpperCase();
+    if (data.statut) data.statut = data.statut.toUpperCase();
+
+    const paiement = await prisma.paiement.update({
+      where: { id: req.params.id },
+      data
+    });
 
     res.json(paiement);
   } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ message: 'Paiement non trouvé' });
+    }
     res.status(400).json({ message: error.message });
   }
 };
 
 exports.deletePaiement = async (req, res) => {
   try {
-    const paiement = await Paiement.findByIdAndDelete(req.params.id);
-
-    if (!paiement) {
-      return res.status(404).json({ message: 'Paiement non trouvé' });
-    }
+    await prisma.paiement.delete({
+      where: { id: req.params.id }
+    });
 
     res.json({ message: 'Paiement supprimé avec succès' });
   } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ message: 'Paiement non trouvé' });
+    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -90,15 +119,17 @@ exports.getHistoriquePaiements = async (req, res) => {
     const { eleveId } = req.params;
     const { anneeScolaire } = req.query;
 
-    const query = { eleve: eleveId };
-    if (anneeScolaire) query.anneeScolaire = anneeScolaire;
+    const where = { eleveId: eleveId };
+    if (anneeScolaire) where.anneeScolaire = anneeScolaire;
 
-    const paiements = await Paiement.find(query)
-      .sort({ datePaiement: -1 });
+    const paiements = await prisma.paiement.findMany({
+      where,
+      orderBy: { datePaiement: 'desc' }
+    });
 
     const totalPaye = paiements
-      .filter(p => p.statut === 'Validé')
-      .reduce((sum, p) => sum + p.montant, 0);
+      .filter(p => p.statut === 'VALIDE')
+      .reduce((sum, p) => sum + Number(p.montant), 0);
 
     res.json({
       paiements,
@@ -114,24 +145,39 @@ exports.getHistoriquePaiements = async (req, res) => {
 exports.getPaiementStats = async (req, res) => {
   try {
     const { anneeScolaire } = req.query;
-    const query = anneeScolaire ? { anneeScolaire, statut: 'Validé' } : { statut: 'Validé' };
+    const where = anneeScolaire
+      ? { anneeScolaire, statut: 'VALIDE' }
+      : { statut: 'VALIDE' };
 
-    const totalPaiements = await Paiement.countDocuments(query);
-    const montantTotal = await Paiement.aggregate([
-      { $match: query },
-      { $group: { _id: null, total: { $sum: '$montant' } } }
-    ]);
+    const totalPaiements = await prisma.paiement.count({ where });
 
-    const parType = await Paiement.aggregate([
-      { $match: query },
-      { $group: { _id: '$typePaiement', total: { $sum: '$montant' }, count: { $sum: 1 } } }
-    ]);
+    const montantTotalResult = await prisma.paiement.aggregate({
+      where,
+      _sum: {
+        montant: true
+      }
+    });
+
+    const parType = await prisma.paiement.groupBy({
+      by: ['typePaiement'],
+      where,
+      _sum: {
+        montant: true
+      },
+      _count: {
+        typePaiement: true
+      }
+    });
 
     res.json({
       totalPaiements,
-      montantTotal: montantTotal[0]?.total || 0,
+      montantTotal: Number(montantTotalResult._sum.montant || 0),
       devise: 'XOF',
-      parType
+      parType: parType.map(item => ({
+        _id: item.typePaiement,
+        total: Number(item._sum.montant || 0),
+        count: item._count.typePaiement
+      }))
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -1,19 +1,34 @@
-const Enseignant = require('../models/Enseignant');
+const prisma = require('../lib/prisma');
 
 exports.getEnseignants = async (req, res) => {
   try {
     const { statut, search } = req.query;
-    let query = {};
+    let where = {};
 
-    if (statut) query.statut = statut;
+    if (statut) where.statut = statut.toUpperCase();
     if (search) {
-      query.$text = { $search: search };
+      where.OR = [
+        { nom: { contains: search, mode: 'insensitive' } },
+        { prenom: { contains: search, mode: 'insensitive' } },
+        { matricule: { contains: search, mode: 'insensitive' } }
+      ];
     }
 
-    const enseignants = await Enseignant.find(query)
-      .populate('specialites')
-      .populate('classesAssignees')
-      .sort({ nom: 1, prenom: 1 });
+    const enseignants = await prisma.enseignant.findMany({
+      where,
+      include: {
+        specialites: {
+          include: {
+            matiere: true
+          }
+        },
+        classesCommeResponsable: true
+      },
+      orderBy: [
+        { nom: 'asc' },
+        { prenom: 'asc' }
+      ]
+    });
 
     res.json(enseignants);
   } catch (error) {
@@ -23,9 +38,17 @@ exports.getEnseignants = async (req, res) => {
 
 exports.getEnseignantById = async (req, res) => {
   try {
-    const enseignant = await Enseignant.findById(req.params.id)
-      .populate('specialites')
-      .populate('classesAssignees');
+    const enseignant = await prisma.enseignant.findUnique({
+      where: { id: req.params.id },
+      include: {
+        specialites: {
+          include: {
+            matiere: true
+          }
+        },
+        classesCommeResponsable: true
+      }
+    });
 
     if (!enseignant) {
       return res.status(404).json({ message: 'Enseignant non trouvé' });
@@ -39,7 +62,14 @@ exports.getEnseignantById = async (req, res) => {
 
 exports.createEnseignant = async (req, res) => {
   try {
-    const enseignant = await Enseignant.create(req.body);
+    const data = { ...req.body };
+
+    // Convertir les enums en majuscules
+    if (data.statut) data.statut = data.statut.toUpperCase();
+    if (data.sexe) data.sexe = data.sexe.toUpperCase();
+    if (data.typeContrat) data.typeContrat = data.typeContrat.toUpperCase();
+
+    const enseignant = await prisma.enseignant.create({ data });
     res.status(201).json(enseignant);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -48,32 +78,38 @@ exports.createEnseignant = async (req, res) => {
 
 exports.updateEnseignant = async (req, res) => {
   try {
-    const enseignant = await Enseignant.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const data = { ...req.body };
 
-    if (!enseignant) {
-      return res.status(404).json({ message: 'Enseignant non trouvé' });
-    }
+    // Convertir les enums en majuscules
+    if (data.statut) data.statut = data.statut.toUpperCase();
+    if (data.sexe) data.sexe = data.sexe.toUpperCase();
+    if (data.typeContrat) data.typeContrat = data.typeContrat.toUpperCase();
+
+    const enseignant = await prisma.enseignant.update({
+      where: { id: req.params.id },
+      data
+    });
 
     res.json(enseignant);
   } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ message: 'Enseignant non trouvé' });
+    }
     res.status(400).json({ message: error.message });
   }
 };
 
 exports.deleteEnseignant = async (req, res) => {
   try {
-    const enseignant = await Enseignant.findByIdAndDelete(req.params.id);
-
-    if (!enseignant) {
-      return res.status(404).json({ message: 'Enseignant non trouvé' });
-    }
+    await prisma.enseignant.delete({
+      where: { id: req.params.id }
+    });
 
     res.json({ message: 'Enseignant supprimé avec succès' });
   } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ message: 'Enseignant non trouvé' });
+    }
     res.status(500).json({ message: error.message });
   }
 };

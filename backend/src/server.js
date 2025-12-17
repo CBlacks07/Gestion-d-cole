@@ -1,10 +1,11 @@
 const express = require('express');
-const mongoose = require('mongoose');
+const { PrismaClient } = require('@prisma/client');
 const cors = require('cors');
 const morgan = require('morgan');
 require('dotenv').config();
 
 const app = express();
+const prisma = new PrismaClient();
 
 // Middleware
 app.use(cors());
@@ -27,25 +28,11 @@ app.use('/api/rapports', require('./routes/rapport.routes'));
 app.get('/', (req, res) => {
   res.json({
     message: 'API de Gestion d\'Établissement Scolaire - Togo',
-    version: '1.0.0',
+    version: '2.0.0',
+    database: 'PostgreSQL',
     status: 'actif'
   });
 });
-
-// Connexion à MongoDB
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => {
-    console.log('✅ Connecté à MongoDB');
-
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
-      console.log(`🚀 Serveur démarré sur le port ${PORT}`);
-    });
-  })
-  .catch(err => {
-    console.error('❌ Erreur de connexion à MongoDB:', err);
-    process.exit(1);
-  });
 
 // Gestion des erreurs
 app.use((err, req, res, next) => {
@@ -56,4 +43,34 @@ app.use((err, req, res, next) => {
   });
 });
 
-module.exports = app;
+// Connexion à la base de données et démarrage du serveur
+async function main() {
+  try {
+    // Test de la connexion à la base de données
+    await prisma.$connect();
+    console.log('✅ Connecté à PostgreSQL');
+
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+      console.log(`🚀 Serveur démarré sur le port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('❌ Erreur de connexion à PostgreSQL:', error);
+    process.exit(1);
+  }
+}
+
+// Gestion de la fermeture propre
+process.on('SIGINT', async () => {
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
+main();
+
+module.exports = { app, prisma };

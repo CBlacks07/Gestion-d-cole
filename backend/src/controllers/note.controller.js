@@ -1,23 +1,25 @@
-const Note = require('../models/Note');
-const Eleve = require('../models/Eleve');
-const Matiere = require('../models/Matiere');
+const prisma = require('../lib/prisma');
 
 exports.getNotes = async (req, res) => {
   try {
     const { eleve, classe, matiere, periode, anneeScolaire } = req.query;
-    let query = {};
+    let where = {};
 
-    if (eleve) query.eleve = eleve;
-    if (classe) query.classe = classe;
-    if (matiere) query.matiere = matiere;
-    if (periode) query.periode = periode;
-    if (anneeScolaire) query.anneeScolaire = anneeScolaire;
+    if (eleve) where.eleveId = eleve;
+    if (classe) where.classeId = classe;
+    if (matiere) where.matiereId = matiere;
+    if (periode) where.periode = periode.toUpperCase();
+    if (anneeScolaire) where.anneeScolaire = anneeScolaire;
 
-    const notes = await Note.find(query)
-      .populate('eleve')
-      .populate('matiere')
-      .populate('enseignant')
-      .sort({ dateEvaluation: -1 });
+    const notes = await prisma.note.findMany({
+      where,
+      include: {
+        eleve: true,
+        matiere: true,
+        enseignant: true
+      },
+      orderBy: { dateEvaluation: 'desc' }
+    });
 
     res.json(notes);
   } catch (error) {
@@ -27,10 +29,14 @@ exports.getNotes = async (req, res) => {
 
 exports.getNoteById = async (req, res) => {
   try {
-    const note = await Note.findById(req.params.id)
-      .populate('eleve')
-      .populate('matiere')
-      .populate('enseignant');
+    const note = await prisma.note.findUnique({
+      where: { id: req.params.id },
+      include: {
+        eleve: true,
+        matiere: true,
+        enseignant: true
+      }
+    });
 
     if (!note) {
       return res.status(404).json({ message: 'Note non trouvée' });
@@ -44,7 +50,13 @@ exports.getNoteById = async (req, res) => {
 
 exports.createNote = async (req, res) => {
   try {
-    const note = await Note.create(req.body);
+    const data = { ...req.body };
+
+    // Convertir les enums en majuscules
+    if (data.typeEvaluation) data.typeEvaluation = data.typeEvaluation.toUpperCase();
+    if (data.periode) data.periode = data.periode.toUpperCase();
+
+    const note = await prisma.note.create({ data });
     res.status(201).json(note);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -53,32 +65,37 @@ exports.createNote = async (req, res) => {
 
 exports.updateNote = async (req, res) => {
   try {
-    const note = await Note.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const data = { ...req.body };
 
-    if (!note) {
-      return res.status(404).json({ message: 'Note non trouvée' });
-    }
+    // Convertir les enums en majuscules
+    if (data.typeEvaluation) data.typeEvaluation = data.typeEvaluation.toUpperCase();
+    if (data.periode) data.periode = data.periode.toUpperCase();
+
+    const note = await prisma.note.update({
+      where: { id: req.params.id },
+      data
+    });
 
     res.json(note);
   } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ message: 'Note non trouvée' });
+    }
     res.status(400).json({ message: error.message });
   }
 };
 
 exports.deleteNote = async (req, res) => {
   try {
-    const note = await Note.findByIdAndDelete(req.params.id);
-
-    if (!note) {
-      return res.status(404).json({ message: 'Note non trouvée' });
-    }
+    await prisma.note.delete({
+      where: { id: req.params.id }
+    });
 
     res.json({ message: 'Note supprimée avec succès' });
   } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ message: 'Note non trouvée' });
+    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -95,21 +112,28 @@ exports.getBulletin = async (req, res) => {
       });
     }
 
-    const eleve = await Eleve.findById(eleveId).populate('classe');
+    const eleve = await prisma.eleve.findUnique({
+      where: { id: eleveId },
+      include: { classe: true }
+    });
+
     if (!eleve) {
       return res.status(404).json({ message: 'Élève non trouvé' });
     }
 
-    const notes = await Note.find({
-      eleve: eleveId,
-      periode,
-      anneeScolaire
-    }).populate('matiere');
+    const notes = await prisma.note.findMany({
+      where: {
+        eleveId: eleveId,
+        periode: periode.toUpperCase(),
+        anneeScolaire
+      },
+      include: { matiere: true }
+    });
 
     // Calculer les moyennes
     const notesParMatiere = {};
     notes.forEach(note => {
-      const matiereId = note.matiere._id.toString();
+      const matiereId = note.matiere.id;
       if (!notesParMatiere[matiereId]) {
         notesParMatiere[matiereId] = {
           matiere: note.matiere,
@@ -124,7 +148,7 @@ exports.getBulletin = async (req, res) => {
     let totalCoefficients = 0;
 
     Object.values(notesParMatiere).forEach(item => {
-      const sommeNotes = item.notes.reduce((sum, n) => sum + n.note, 0);
+      const sommeNotes = item.notes.reduce((sum, n) => sum + Number(n.note), 0);
       item.moyenne = sommeNotes / item.notes.length;
       const coef = item.matiere.coefficient;
       totalPoints += item.moyenne * coef;

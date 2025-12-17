@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const prisma = require('../lib/prisma');
 
 exports.protect = async (req, res, next) => {
   try {
@@ -14,7 +14,18 @@ exports.protect = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-motDePasse');
+    req.user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      select: {
+        id: true,
+        nom: true,
+        prenom: true,
+        email: true,
+        role: true,
+        telephone: true,
+        actif: true
+      }
+    });
 
     if (!req.user) {
       return res.status(401).json({ message: 'Utilisateur non trouvé' });
@@ -28,7 +39,10 @@ exports.protect = async (req, res, next) => {
 
 exports.authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    // Convertir les rôles en majuscules pour correspondre aux enums Prisma
+    const upperRoles = roles.map(r => r.toUpperCase());
+
+    if (!upperRoles.includes(req.user.role)) {
       return res.status(403).json({
         message: `Le rôle ${req.user.role} n'est pas autorisé à accéder à cette ressource`
       });

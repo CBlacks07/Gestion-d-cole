@@ -1,22 +1,31 @@
-const Eleve = require('../models/Eleve');
+const prisma = require('../lib/prisma');
 
 // @desc    Obtenir tous les élèves
 // @route   GET /api/eleves
 exports.getEleves = async (req, res) => {
   try {
     const { classe, statut, anneeScolaire, search } = req.query;
-    let query = {};
+    let where = {};
 
-    if (classe) query.classe = classe;
-    if (statut) query.statut = statut;
-    if (anneeScolaire) query.anneeScolaire = anneeScolaire;
+    if (classe) where.classeId = classe;
+    if (statut) where.statut = statut.toUpperCase();
+    if (anneeScolaire) where.anneeScolaire = anneeScolaire;
     if (search) {
-      query.$text = { $search: search };
+      where.OR = [
+        { nom: { contains: search, mode: 'insensitive' } },
+        { prenom: { contains: search, mode: 'insensitive' } },
+        { numeroMatricule: { contains: search, mode: 'insensitive' } }
+      ];
     }
 
-    const eleves = await Eleve.find(query)
-      .populate('classe')
-      .sort({ nom: 1, prenom: 1 });
+    const eleves = await prisma.eleve.findMany({
+      where,
+      include: { classe: true },
+      orderBy: [
+        { nom: 'asc' },
+        { prenom: 'asc' }
+      ]
+    });
 
     res.json(eleves);
   } catch (error) {
@@ -28,7 +37,10 @@ exports.getEleves = async (req, res) => {
 // @route   GET /api/eleves/:id
 exports.getEleveById = async (req, res) => {
   try {
-    const eleve = await Eleve.findById(req.params.id).populate('classe');
+    const eleve = await prisma.eleve.findUnique({
+      where: { id: req.params.id },
+      include: { classe: true }
+    });
 
     if (!eleve) {
       return res.status(404).json({ message: 'Élève non trouvé' });
@@ -44,7 +56,13 @@ exports.getEleveById = async (req, res) => {
 // @route   POST /api/eleves
 exports.createEleve = async (req, res) => {
   try {
-    const eleve = await Eleve.create(req.body);
+    const data = { ...req.body };
+
+    // Convertir les enums en majuscules
+    if (data.statut) data.statut = data.statut.toUpperCase();
+    if (data.sexe) data.sexe = data.sexe.toUpperCase();
+
+    const eleve = await prisma.eleve.create({ data });
     res.status(201).json(eleve);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -55,18 +73,22 @@ exports.createEleve = async (req, res) => {
 // @route   PUT /api/eleves/:id
 exports.updateEleve = async (req, res) => {
   try {
-    const eleve = await Eleve.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const data = { ...req.body };
 
-    if (!eleve) {
-      return res.status(404).json({ message: 'Élève non trouvé' });
-    }
+    // Convertir les enums en majuscules
+    if (data.statut) data.statut = data.statut.toUpperCase();
+    if (data.sexe) data.sexe = data.sexe.toUpperCase();
+
+    const eleve = await prisma.eleve.update({
+      where: { id: req.params.id },
+      data
+    });
 
     res.json(eleve);
   } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ message: 'Élève non trouvé' });
+    }
     res.status(400).json({ message: error.message });
   }
 };
@@ -75,14 +97,15 @@ exports.updateEleve = async (req, res) => {
 // @route   DELETE /api/eleves/:id
 exports.deleteEleve = async (req, res) => {
   try {
-    const eleve = await Eleve.findByIdAndDelete(req.params.id);
-
-    if (!eleve) {
-      return res.status(404).json({ message: 'Élève non trouvé' });
-    }
+    await prisma.eleve.delete({
+      where: { id: req.params.id }
+    });
 
     res.json({ message: 'Élève supprimé avec succès' });
   } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ message: 'Élève non trouvé' });
+    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -92,21 +115,25 @@ exports.deleteEleve = async (req, res) => {
 exports.getElevesStats = async (req, res) => {
   try {
     const { anneeScolaire } = req.query;
-    const query = anneeScolaire ? { anneeScolaire } : {};
+    const where = anneeScolaire ? { anneeScolaire } : {};
 
-    const total = await Eleve.countDocuments(query);
-    const actifs = await Eleve.countDocuments({ ...query, statut: 'actif' });
-    const parSexe = await Eleve.aggregate([
-      { $match: query },
-      { $group: { _id: '$sexe', count: { $sum: 1 } } }
-    ]);
+    const total = await prisma.eleve.count({ where });
+    const actifs = await prisma.eleve.count({
+      where: { ...where, statut: 'ACTIF' }
+    });
+
+    const parSexe = await prisma.eleve.groupBy({
+      by: ['sexe'],
+      where,
+      _count: { sexe: true }
+    });
 
     res.json({
       total,
       actifs,
       parSexe: {
-        masculin: parSexe.find(s => s._id === 'M')?.count || 0,
-        feminin: parSexe.find(s => s._id === 'F')?.count || 0
+        masculin: parSexe.find(s => s.sexe === 'M')?._count.sexe || 0,
+        feminin: parSexe.find(s => s.sexe === 'F')?._count.sexe || 0
       }
     });
   } catch (error) {

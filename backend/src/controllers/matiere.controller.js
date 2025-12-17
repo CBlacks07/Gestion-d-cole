@@ -1,14 +1,19 @@
-const Matiere = require('../models/Matiere');
+const prisma = require('../lib/prisma');
 
 exports.getMatieres = async (req, res) => {
   try {
     const { cycle, niveau } = req.query;
-    let query = {};
+    let where = {};
 
-    if (cycle) query.cycles = cycle;
-    if (niveau) query.niveaux = niveau;
+    // Les cycles et niveaux sont des arrays dans Prisma
+    if (cycle) where.cycles = { has: cycle.toUpperCase() };
+    if (niveau) where.niveaux = { has: niveau.toUpperCase() };
 
-    const matieres = await Matiere.find(query).sort({ nom: 1 });
+    const matieres = await prisma.matiere.findMany({
+      where,
+      orderBy: { nom: 'asc' }
+    });
+
     res.json(matieres);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -17,7 +22,9 @@ exports.getMatieres = async (req, res) => {
 
 exports.getMatiereById = async (req, res) => {
   try {
-    const matiere = await Matiere.findById(req.params.id);
+    const matiere = await prisma.matiere.findUnique({
+      where: { id: req.params.id }
+    });
 
     if (!matiere) {
       return res.status(404).json({ message: 'Matière non trouvée' });
@@ -31,7 +38,17 @@ exports.getMatiereById = async (req, res) => {
 
 exports.createMatiere = async (req, res) => {
   try {
-    const matiere = await Matiere.create(req.body);
+    const data = { ...req.body };
+
+    // Convertir les enums en majuscules pour les arrays
+    if (data.cycles && Array.isArray(data.cycles)) {
+      data.cycles = data.cycles.map(c => c.toUpperCase());
+    }
+    if (data.niveaux && Array.isArray(data.niveaux)) {
+      data.niveaux = data.niveaux.map(n => n.toUpperCase());
+    }
+
+    const matiere = await prisma.matiere.create({ data });
     res.status(201).json(matiere);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -40,32 +57,41 @@ exports.createMatiere = async (req, res) => {
 
 exports.updateMatiere = async (req, res) => {
   try {
-    const matiere = await Matiere.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const data = { ...req.body };
 
-    if (!matiere) {
-      return res.status(404).json({ message: 'Matière non trouvée' });
+    // Convertir les enums en majuscules pour les arrays
+    if (data.cycles && Array.isArray(data.cycles)) {
+      data.cycles = data.cycles.map(c => c.toUpperCase());
     }
+    if (data.niveaux && Array.isArray(data.niveaux)) {
+      data.niveaux = data.niveaux.map(n => n.toUpperCase());
+    }
+
+    const matiere = await prisma.matiere.update({
+      where: { id: req.params.id },
+      data
+    });
 
     res.json(matiere);
   } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ message: 'Matière non trouvée' });
+    }
     res.status(400).json({ message: error.message });
   }
 };
 
 exports.deleteMatiere = async (req, res) => {
   try {
-    const matiere = await Matiere.findByIdAndDelete(req.params.id);
-
-    if (!matiere) {
-      return res.status(404).json({ message: 'Matière non trouvée' });
-    }
+    await prisma.matiere.delete({
+      where: { id: req.params.id }
+    });
 
     res.json({ message: 'Matière supprimée avec succès' });
   } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ message: 'Matière non trouvée' });
+    }
     res.status(500).json({ message: error.message });
   }
 };
