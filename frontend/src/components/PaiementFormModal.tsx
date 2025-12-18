@@ -60,7 +60,7 @@ export default function PaiementFormModal({ isOpen, onClose, onSuccess }: Paieme
 
     try {
       const data = {
-        eleve: formData.eleveId,
+        eleveId: formData.eleveId,
         typePaiement: formData.typePaiement,
         montant: parseFloat(formData.montant),
         devise: 'XOF',
@@ -68,7 +68,7 @@ export default function PaiementFormModal({ isOpen, onClose, onSuccess }: Paieme
         moisConcerne: formData.moisConcerne || undefined,
         modePaiement: formData.modePaiement,
         numeroPiece: formData.numeroPiece || undefined,
-        statut: 'Validé',
+        statut: 'VALIDE',
         remarques: formData.remarques || undefined,
         anneeScolaire: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1)
       }
