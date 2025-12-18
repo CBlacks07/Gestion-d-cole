@@ -59,6 +59,13 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess }: ClasseFo
     Lycée: ['2nde', '1ère', 'Terminale']
   }
 
+  // Mapping des cycles affichés vers les enums PostgreSQL (sans accents)
+  const cycleToEnum: Record<string, string> = {
+    'Primaire': 'PRIMAIRE',
+    'Collège': 'COLLEGE',
+    'Lycée': 'LYCEE'
+  }
+
   // Mapping des niveaux affichés vers les enums PostgreSQL
   const niveauToEnum: Record<string, string> = {
     '6ème': 'SIXIEME',
@@ -75,13 +82,14 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess }: ClasseFo
     setLoading(true)
 
     try {
-      // Convertir le niveau vers l'enum si nécessaire
-      const niveauEnum = niveauToEnum[formData.niveau] || formData.niveau
+      // Convertir le cycle et le niveau vers les enums sans accents
+      const cycleEnum = cycleToEnum[formData.cycle] || formData.cycle.toUpperCase()
+      const niveauEnum = niveauToEnum[formData.niveau] || formData.niveau.toUpperCase()
 
       const data = {
         nom: formData.nom,
         niveau: niveauEnum,
-        cycle: formData.cycle,
+        cycle: cycleEnum,
         section: formData.section || undefined,
         enseignantPrincipalId: formData.enseignantPrincipal || undefined,
         effectifMax: parseInt(formData.effectifMax) || 50,
