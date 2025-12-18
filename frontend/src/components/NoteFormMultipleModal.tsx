@@ -79,14 +79,13 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
 
       setFormData(prev => ({ ...prev, classeId: eleve.classe.id }))
 
-      const response = await api.get(`/classe-matieres/classe/${eleve.classe.id}`, {
-        params: { annee_scolaire: anneeActive?.annee }
-      })
+      // Charger toutes les matières disponibles depuis /matieres
+      const response = await api.get('/matieres')
 
       const matieresData = response.data.map((m: any) => ({
-        matiere_id: m.matiere_id,
+        matiere_id: m.id,
         matiere_nom: m.nom,
-        coefficient: m.coefficient,
+        coefficient: 1, // Coefficient par défaut
         note: '',
         commentaire: ''
       }))
