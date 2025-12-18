@@ -76,9 +76,12 @@ export default function EleveFormModal({ isOpen, onClose, onSuccess, eleve }: El
     setLoading(true)
 
     try {
+      // Préparer les données sans classeId (on utilise classe à la place)
+      const { classeId, ...restFormData } = formData
+
       const data = {
-        ...formData,
-        classe: formData.classeId || undefined,
+        ...restFormData,
+        classe: classeId || undefined,
         anneeScolaire: eleve?.anneeScolaire || (new Date().getFullYear() + '-' + (new Date().getFullYear() + 1)),
         dateInscription: eleve?.dateInscription || new Date().toISOString()
       }
