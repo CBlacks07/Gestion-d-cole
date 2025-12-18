@@ -38,23 +38,26 @@ export default function EleveFormModal({ isOpen, onClose, onSuccess, eleve }: El
       if (eleve) {
         // Mode édition - pré-remplir le formulaire
         setFormData({
-          nom: eleve.nom,
-          prenom: eleve.prenom,
+          nom: eleve.nom || '',
+          prenom: eleve.prenom || '',
           dateNaissance: eleve.dateNaissance?.split('T')[0] || '',
-          lieuNaissance: eleve.lieuNaissance,
-          sexe: eleve.sexe,
+          lieuNaissance: eleve.lieuNaissance || '',
+          sexe: eleve.sexe || 'M',
           classeId: eleve.classe?.id || '',
-          tuteur: eleve.tuteur || {
-            nom: '',
-            prenom: '',
-            telephone: '',
-            email: '',
-            profession: '',
-            adresse: ''
+          tuteur: {
+            nom: eleve.tuteur?.nom || '',
+            prenom: eleve.tuteur?.prenom || '',
+            telephone: eleve.tuteur?.telephone || '',
+            email: eleve.tuteur?.email || '',
+            profession: eleve.tuteur?.profession || '',
+            adresse: eleve.tuteur?.adresse || ''
           },
           groupeSanguin: eleve.groupeSanguin || '',
-          statut: eleve.statut
+          statut: eleve.statut || 'actif'
         })
+      } else {
+        // Mode création - réinitialiser le formulaire
+        resetForm()
       }
     }
   }, [isOpen, eleve])
@@ -226,7 +229,7 @@ export default function EleveFormModal({ isOpen, onClose, onSuccess, eleve }: El
               >
                 <option value="">Sélectionner une classe...</option>
                 {classes.map((classe) => (
-                  <option key={classe._id} value={classe._id}>
+                  <option key={classe.id} value={classe.id}>
                     {classe.nom} - {classe.cycle}
                   </option>
                 ))}

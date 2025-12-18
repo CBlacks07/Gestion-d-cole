@@ -205,7 +205,7 @@ exports.createEleve = async (req, res) => {
         data.dateNaissance || data.date_naissance,
         data.lieuNaissance || data.lieu_naissance,
         data.sexe,
-        data.classeId || data.classe_id || null,
+        data.classeId || data.classe_id || data.classe || null,
         tuteurNom,
         tuteurPrenom,
         tuteurTelephone,
@@ -237,6 +237,15 @@ exports.updateEleve = async (req, res) => {
     if (data.statut) data.statut = data.statut.toUpperCase();
     if (data.sexe) data.sexe = data.sexe.toUpperCase();
 
+    // Extraire les données du tuteur si elles sont dans un objet imbriqué
+    if (data.tuteur && typeof data.tuteur === 'object') {
+      data.tuteurNom = data.tuteur.nom;
+      data.tuteurPrenom = data.tuteur.prenom;
+      data.tuteurTelephone = data.tuteur.telephone;
+      data.tuteurEmail = data.tuteur.email;
+      data.tuteurAdresse = data.tuteur.adresse;
+    }
+
     // Construire la requête dynamiquement en fonction des champs fournis
     const fields = [];
     const values = [];
@@ -253,6 +262,7 @@ exports.updateEleve = async (req, res) => {
       sexe: 'sexe',
       classeId: 'classe_id',
       classe_id: 'classe_id',
+      classe: 'classe_id',
       tuteurNom: 'tuteur_nom',
       tuteur_nom: 'tuteur_nom',
       tuteurPrenom: 'tuteur_prenom',
