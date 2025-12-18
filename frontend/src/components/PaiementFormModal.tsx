@@ -65,11 +65,11 @@ export default function PaiementFormModal({ isOpen, onClose, onSuccess }: Paieme
         montant: parseFloat(formData.montant),
         devise: 'XOF',
         datePaiement: formData.datePaiement,
-        moisConcerne: formData.moisConcerne || undefined,
+        moisConcerne: formData.moisConcerne && formData.moisConcerne.trim() !== '' ? formData.moisConcerne : undefined,
         modePaiement: formData.modePaiement,
-        numeroPiece: formData.numeroPiece || undefined,
+        numeroPiece: formData.numeroPiece && formData.numeroPiece.trim() !== '' ? formData.numeroPiece : undefined,
         statut: 'VALIDE',
-        remarques: formData.remarques || undefined,
+        remarques: formData.remarques && formData.remarques.trim() !== '' ? formData.remarques : undefined,
         anneeScolaire: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1)
       }
 

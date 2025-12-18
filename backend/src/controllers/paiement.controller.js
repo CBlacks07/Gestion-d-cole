@@ -190,6 +190,8 @@ exports.createPaiement = async (req, res) => {
 
     res.status(201).json(paiement);
   } catch (error) {
+    console.error('❌ Erreur création paiement:', error.message);
+    console.error('Détails:', error.detail || error.hint || error);
     res.status(400).json({ message: error.message });
   }
 };
