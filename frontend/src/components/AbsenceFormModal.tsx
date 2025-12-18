@@ -130,7 +130,15 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
                 required
                 className="input"
                 value={formData.eleveId}
-                onChange={(e) => setFormData({ ...formData, eleveId: e.target.value })}
+                onChange={(e) => {
+                  const eleveId = e.target.value
+                  const eleve = eleves.find(e => e.id === eleveId)
+                  setFormData({
+                    ...formData,
+                    eleveId,
+                    classeId: eleve?.classe?.id || ''
+                  })
+                }}
               >
                 <option value="">Sélectionner un élève...</option>
                 {eleves.map((eleve) => (
