@@ -17,7 +17,29 @@ export default function Absences() {
   const loadAbsences = async () => {
     try {
       const response = await api.get('/absences')
-      setAbsences(response.data)
+
+      // Mapper les données du backend (snake_case) vers le frontend (camelCase)
+      const mappedAbsences = response.data.map((data: any) => ({
+        id: data.id,
+        eleveId: data.eleve_id || data.eleveId,
+        classeId: data.classe_id || data.classeId,
+        date: data.date,
+        periode: data.periode,
+        justifiee: data.justifiee,
+        motif: data.motif,
+        eleve: data.eleve || {
+          id: data.eleve_id,
+          nom: data.eleve_nom,
+          prenom: data.eleve_prenom,
+          matricule: data.eleve_matricule
+        },
+        classe: data.classe || {
+          id: data.classe_id,
+          nom: data.classe_nom
+        }
+      }))
+
+      setAbsences(mappedAbsences)
     } catch (error) {
       console.error('Erreur lors du chargement des absences', error)
     } finally {

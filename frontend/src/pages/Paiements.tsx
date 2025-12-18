@@ -19,7 +19,28 @@ export default function Paiements() {
   const loadPaiements = async () => {
     try {
       const response = await api.get('/paiements')
-      setPaiements(response.data)
+
+      // Mapper les données du backend (snake_case) vers le frontend (camelCase)
+      const mappedPaiements = response.data.map((data: any) => ({
+        id: data.id,
+        eleveId: data.eleve_id || data.eleveId,
+        typePaiement: data.type_paiement || data.typePaiement,
+        montant: data.montant,
+        devise: data.devise || 'XOF',
+        modePaiement: data.mode_paiement || data.modePaiement,
+        datePaiement: data.date_paiement || data.datePaiement,
+        statut: data.statut,
+        reference: data.reference,
+        remarques: data.remarques,
+        eleve: data.eleve || {
+          id: data.eleve_id,
+          nom: data.eleve_nom,
+          prenom: data.eleve_prenom,
+          matricule: data.eleve_matricule
+        }
+      }))
+
+      setPaiements(mappedPaiements)
     } catch (error) {
       console.error('Erreur lors du chargement des paiements', error)
     } finally {
@@ -43,7 +64,15 @@ export default function Paiements() {
   const loadStats = async () => {
     try {
       const response = await api.get('/paiements/stats')
-      setStats(response.data)
+
+      // Mapper les stats du backend (snake_case) vers le frontend (camelCase)
+      const mappedStats = {
+        montantTotal: response.data.montant_total || response.data.montantTotal || 0,
+        totalPaiements: response.data.total_paiements || response.data.totalPaiements || 0,
+        devise: response.data.devise || 'XOF'
+      }
+
+      setStats(mappedStats)
     } catch (error) {
       console.error('Erreur lors du chargement des statistiques', error)
     }

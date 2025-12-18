@@ -18,7 +18,37 @@ export default function Classes() {
   const loadClasses = async () => {
     try {
       const response = await api.get('/classes')
-      setClasses(response.data)
+
+      // Mapper les données du backend (snake_case) vers le frontend (camelCase)
+      const mappedClasses = response.data.map((data: any) => ({
+        id: data.id,
+        nom: data.nom,
+        niveau: data.niveau,
+        cycle: data.cycle,
+        section: data.section,
+        anneeScolaire: data.annee_scolaire || data.anneeScolaire,
+        enseignantPrincipalId: data.enseignant_principal_id || data.enseignantPrincipalId,
+        effectifMax: data.effectif_max || data.effectifMax || 50,
+        effectifActuel: data.effectifActuel || data.effectif_actuel || 0,
+        salle: data.salle,
+        montantInscription: data.montant_inscription || data.montantInscription || 0,
+        montantMensuel: data.montant_mensuel || data.montantMensuel || 0,
+        devise: data.devise || 'XOF',
+        enseignantPrincipal: data.enseignantPrincipal || (data.enseignant_principal_id && {
+          id: data.enseignant_id,
+          nom: data.enseignant_nom,
+          prenom: data.enseignant_prenom,
+          matricule: data.enseignant_matricule
+        }),
+        // Pour compatibilité avec l'ancien format (si nécessaire)
+        fraisScolarite: {
+          montantInscription: data.montant_inscription || data.montantInscription || 0,
+          montantMensuel: data.montant_mensuel || data.montantMensuel || 0,
+          devise: data.devise || 'XOF'
+        }
+      }))
+
+      setClasses(mappedClasses)
     } catch (error) {
       console.error('Erreur lors du chargement des classes', error)
     } finally {
@@ -99,7 +129,7 @@ export default function Classes() {
           <h2 className="text-2xl font-bold mb-4">{cycle}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {classesList.map((classe) => (
-              <div key={classe._id} className="card hover:shadow-lg transition-shadow">
+              <div key={classe.id} className="card hover:shadow-lg transition-shadow">
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-xl font-bold">{classe.nom}</h3>
@@ -111,7 +141,7 @@ export default function Classes() {
                     )}
                   </div>
                   <Link
-                    to={`/classes/${classe._id}`}
+                    to={`/classes/${classe.id}`}
                     className="text-primary-600 hover:text-primary-700"
                   >
                     <Eye className="h-5 w-5" />

@@ -17,7 +17,33 @@ export default function Notes() {
   const loadNotes = async () => {
     try {
       const response = await api.get('/notes')
-      setNotes(response.data)
+
+      // Mapper les données du backend (snake_case) vers le frontend (camelCase)
+      const mappedNotes = response.data.map((data: any) => ({
+        id: data.id,
+        eleveId: data.eleve_id || data.eleveId,
+        matiereId: data.matiere_id || data.matiereId,
+        typeEvaluation: data.type_evaluation || data.typeEvaluation,
+        periode: data.periode,
+        note: data.note,
+        noteMax: data.note_max || data.noteMax || 20,
+        coefficient: data.coefficient || 1,
+        dateEvaluation: data.date_evaluation || data.dateEvaluation,
+        commentaire: data.commentaire,
+        eleve: data.eleve || {
+          id: data.eleve_id,
+          nom: data.eleve_nom,
+          prenom: data.eleve_prenom,
+          matricule: data.eleve_matricule
+        },
+        matiere: data.matiere || {
+          id: data.matiere_id,
+          nom: data.matiere_nom,
+          code: data.matiere_code
+        }
+      }))
+
+      setNotes(mappedNotes)
     } catch (error) {
       console.error('Erreur lors du chargement des notes', error)
     } finally {
