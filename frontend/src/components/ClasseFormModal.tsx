@@ -39,37 +39,6 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess }: ClasseFo
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-
-    try {
-      const data = {
-        nom: formData.nom,
-        niveau: formData.niveau,
-        cycle: formData.cycle,
-        section: formData.section || undefined,
-        enseignantPrincipalId: formData.enseignantPrincipal || undefined,
-        effectifMax: parseInt(formData.effectifMax),
-        salle: formData.salle || undefined,
-        anneeScolaire: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
-        montantInscription: parseFloat(formData.montantInscription),
-        montantMensuel: parseFloat(formData.montantMensuel),
-        devise: 'XOF'
-      }
-
-      await api.post('/classes', data)
-      onSuccess()
-      onClose()
-      resetForm()
-    } catch (error: any) {
-      console.error('Erreur lors de la création de la classe', error)
-      alert(error.response?.data?.message || 'Erreur lors de la création de la classe')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const resetForm = () => {
     setFormData({
       nom: '',
@@ -88,6 +57,51 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess }: ClasseFo
     Primaire: ['CP1', 'CP2', 'CE1', 'CE2', 'CM1', 'CM2'],
     Collège: ['6ème', '5ème', '4ème', '3ème'],
     Lycée: ['2nde', '1ère', 'Terminale']
+  }
+
+  // Mapping des niveaux affichés vers les enums PostgreSQL
+  const niveauToEnum: Record<string, string> = {
+    '6ème': 'SIXIEME',
+    '5ème': 'CINQUIEME',
+    '4ème': 'QUATRIEME',
+    '3ème': 'TROISIEME',
+    '2nde': 'SECONDE',
+    '1ère': 'PREMIERE',
+    'Terminale': 'TERMINALE'
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+
+    try {
+      // Convertir le niveau vers l'enum si nécessaire
+      const niveauEnum = niveauToEnum[formData.niveau] || formData.niveau
+
+      const data = {
+        nom: formData.nom,
+        niveau: niveauEnum,
+        cycle: formData.cycle,
+        section: formData.section || undefined,
+        enseignantPrincipalId: formData.enseignantPrincipal || undefined,
+        effectifMax: parseInt(formData.effectifMax) || 50,
+        salle: formData.salle || undefined,
+        anneeScolaire: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
+        montantInscription: parseFloat(formData.montantInscription) || 0,
+        montantMensuel: parseFloat(formData.montantMensuel) || 0,
+        devise: 'XOF'
+      }
+
+      await api.post('/classes', data)
+      onSuccess()
+      onClose()
+      resetForm()
+    } catch (error: any) {
+      console.error('Erreur lors de la création de la classe', error)
+      alert(error.response?.data?.message || 'Erreur lors de la création de la classe')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
