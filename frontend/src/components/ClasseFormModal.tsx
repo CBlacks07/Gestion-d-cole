@@ -49,15 +49,13 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess }: ClasseFo
         niveau: formData.niveau,
         cycle: formData.cycle,
         section: formData.section || undefined,
-        enseignantPrincipal: formData.enseignantPrincipal || undefined,
+        enseignantPrincipalId: formData.enseignantPrincipal || undefined,
         effectifMax: parseInt(formData.effectifMax),
         salle: formData.salle || undefined,
         anneeScolaire: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
-        fraisScolarite: {
-          montantInscription: parseFloat(formData.montantInscription),
-          montantMensuel: parseFloat(formData.montantMensuel),
-          devise: 'XOF'
-        }
+        montantInscription: parseFloat(formData.montantInscription),
+        montantMensuel: parseFloat(formData.montantMensuel),
+        devise: 'XOF'
       }
 
       await api.post('/classes', data)
@@ -194,7 +192,7 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess }: ClasseFo
               >
                 <option value="">Sélectionner un enseignant...</option>
                 {enseignants.map((ens) => (
-                  <option key={ens._id} value={ens._id}>
+                  <option key={ens.id} value={ens.id}>
                     {ens.prenom} {ens.nom}
                   </option>
                 ))}
