@@ -20,7 +20,32 @@ export default function Eleves() {
   const loadEleves = async () => {
     try {
       const response = await api.get('/eleves')
-      setEleves(response.data)
+
+      // Mapper les données du backend (snake_case) vers le frontend (camelCase)
+      const mappedEleves = response.data.map((data: any) => ({
+        id: data.id,
+        matricule: data.matricule,
+        nom: data.nom,
+        prenom: data.prenom,
+        dateNaissance: data.date_naissance || data.dateNaissance,
+        lieuNaissance: data.lieu_naissance || data.lieuNaissance,
+        sexe: data.sexe,
+        groupeSanguin: data.groupe_sanguin || data.groupeSanguin,
+        statut: data.statut,
+        anneeScolaire: data.annee_scolaire || data.anneeScolaire,
+        dateInscription: data.date_inscription || data.dateInscription,
+        classe: data.classe,
+        tuteur: {
+          nom: data.tuteur_nom || data.tuteur?.nom || '',
+          prenom: data.tuteur_prenom || data.tuteur?.prenom || '',
+          telephone: data.tuteur_telephone || data.tuteur?.telephone || '',
+          email: data.tuteur_email || data.tuteur?.email || '',
+          adresse: data.tuteur_adresse || data.tuteur?.adresse || '',
+          profession: data.tuteur_profession || data.tuteur?.profession || ''
+        }
+      }))
+
+      setEleves(mappedEleves)
     } catch (error) {
       console.error('Erreur lors du chargement des élèves', error)
     } finally {

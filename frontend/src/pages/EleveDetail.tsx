@@ -14,10 +14,48 @@ export default function EleveDetail() {
     loadEleve()
   }, [id])
 
+  // Helper pour formater les dates en toute sécurité
+  const formatDate = (dateString: string | null | undefined): string => {
+    if (!dateString) return '-'
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return '-'
+      return format(date, 'dd/MM/yyyy')
+    } catch {
+      return '-'
+    }
+  }
+
   const loadEleve = async () => {
     try {
       const response = await api.get(`/eleves/${id}`)
-      setEleve(response.data)
+      const data = response.data
+
+      // Mapper les données du backend (snake_case) vers le frontend (camelCase)
+      const mappedEleve: Eleve = {
+        id: data.id,
+        matricule: data.matricule,
+        nom: data.nom,
+        prenom: data.prenom,
+        dateNaissance: data.date_naissance || data.dateNaissance,
+        lieuNaissance: data.lieu_naissance || data.lieuNaissance,
+        sexe: data.sexe,
+        groupeSanguin: data.groupe_sanguin || data.groupeSanguin,
+        statut: data.statut,
+        anneeScolaire: data.annee_scolaire || data.anneeScolaire,
+        dateInscription: data.date_inscription || data.dateInscription,
+        classe: data.classe,
+        tuteur: {
+          nom: data.tuteur_nom || data.tuteur?.nom || '',
+          prenom: data.tuteur_prenom || data.tuteur?.prenom || '',
+          telephone: data.tuteur_telephone || data.tuteur?.telephone || '',
+          email: data.tuteur_email || data.tuteur?.email || '',
+          adresse: data.tuteur_adresse || data.tuteur?.adresse || '',
+          profession: data.tuteur_profession || data.tuteur?.profession || ''
+        }
+      }
+
+      setEleve(mappedEleve)
     } catch (error) {
       console.error('Erreur lors du chargement de l\'élève', error)
     } finally {
@@ -56,7 +94,7 @@ export default function EleveDetail() {
               <div>
                 <p className="text-sm text-gray-600">Date de naissance</p>
                 <p className="font-medium">
-                  {format(new Date(eleve.dateNaissance), 'dd/MM/yyyy')}
+                  {formatDate(eleve.dateNaissance)}
                 </p>
               </div>
               <div>
