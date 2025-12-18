@@ -262,7 +262,7 @@ export default function ClasseDetail() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {classe.eleves.map((eleve: any) => (
-                  <tr key={eleve._id} className="hover:bg-gray-50">
+                  <tr key={eleve.id} className="hover:bg-gray-50">
                     <td className="table-cell font-medium">{eleve.matricule}</td>
                     <td className="table-cell">{eleve.nom}</td>
                     <td className="table-cell">{eleve.prenom}</td>

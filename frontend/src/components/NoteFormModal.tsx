@@ -113,7 +113,7 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
               >
                 <option value="">Sélectionner un élève...</option>
                 {eleves.map((eleve) => (
-                  <option key={eleve._id} value={eleve._id}>
+                  <option key={eleve.id} value={eleve.id}>
                     {eleve.prenom} {eleve.nom} - {eleve.classe?.nom || 'Sans classe'}
                   </option>
                 ))}
@@ -131,7 +131,7 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
               >
                 <option value="">Sélectionner une matière...</option>
                 {matieres.map((matiere) => (
-                  <option key={matiere._id} value={matiere._id}>
+                  <option key={matiere.id} value={matiere.id}>
                     {matiere.nom}
                   </option>
                 ))}
@@ -149,7 +149,7 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
               >
                 <option value="">Sélectionner une classe...</option>
                 {classes.map((classe) => (
-                  <option key={classe._id} value={classe._id}>
+                  <option key={classe.id} value={classe.id}>
                     {classe.nom} - {classe.cycle}
                   </option>
                 ))}

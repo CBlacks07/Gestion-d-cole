@@ -32,7 +32,23 @@ export default function PaiementFormModal({ isOpen, onClose, onSuccess }: Paieme
   const loadEleves = async () => {
     try {
       const response = await api.get('/eleves')
-      setEleves(response.data.filter((e: Eleve) => e.statut === 'actif'))
+
+      // Mapper les élèves (backend snake_case -> frontend camelCase)
+      const mappedEleves = response.data
+        .map((data: any) => ({
+          id: data.id,
+          matricule: data.matricule,
+          nom: data.nom,
+          prenom: data.prenom,
+          statut: data.statut,
+          classe: data.classe ? {
+            id: data.classe.id,
+            nom: data.classe.nom
+          } : null
+        }))
+        .filter((e: any) => e.statut === 'ACTIF' || e.statut === 'actif')
+
+      setEleves(mappedEleves)
     } catch (error) {
       console.error('Erreur lors du chargement des élèves', error)
     }
@@ -106,7 +122,7 @@ export default function PaiementFormModal({ isOpen, onClose, onSuccess }: Paieme
               >
                 <option value="">Sélectionner un élève...</option>
                 {eleves.map((eleve) => (
-                  <option key={eleve._id} value={eleve._id}>
+                  <option key={eleve.id} value={eleve.id}>
                     {eleve.prenom} {eleve.nom} - {eleve.classe?.nom || 'Sans classe'}
                   </option>
                 ))}

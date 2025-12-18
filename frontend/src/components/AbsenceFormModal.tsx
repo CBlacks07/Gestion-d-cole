@@ -37,9 +37,39 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
         api.get('/classes'),
         api.get('/matieres')
       ])
-      setEleves(elevesRes.data.filter((e: Eleve) => e.statut === 'actif'))
-      setClasses(classesRes.data)
-      setMatieres(matieresRes.data)
+
+      // Mapper les élèves (backend snake_case -> frontend camelCase)
+      const mappedEleves = elevesRes.data
+        .map((data: any) => ({
+          id: data.id,
+          matricule: data.matricule,
+          nom: data.nom,
+          prenom: data.prenom,
+          statut: data.statut,
+          classe: data.classe ? {
+            id: data.classe.id,
+            nom: data.classe.nom
+          } : null
+        }))
+        .filter((e: any) => e.statut === 'ACTIF' || e.statut === 'actif')
+
+      // Mapper les classes
+      const mappedClasses = classesRes.data.map((data: any) => ({
+        id: data.id,
+        nom: data.nom,
+        cycle: data.cycle
+      }))
+
+      // Mapper les matières
+      const mappedMatieres = matieresRes.data.map((data: any) => ({
+        id: data.id,
+        nom: data.nom,
+        code: data.code
+      }))
+
+      setEleves(mappedEleves)
+      setClasses(mappedClasses)
+      setMatieres(mappedMatieres)
     } catch (error) {
       console.error('Erreur lors du chargement des données', error)
     }
@@ -104,7 +134,7 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
               >
                 <option value="">Sélectionner un élève...</option>
                 {eleves.map((eleve) => (
-                  <option key={eleve._id} value={eleve._id}>
+                  <option key={eleve.id} value={eleve.id}>
                     {eleve.prenom} {eleve.nom} - {eleve.classe?.nom || 'Sans classe'}
                   </option>
                 ))}
@@ -122,7 +152,7 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
               >
                 <option value="">Sélectionner une classe...</option>
                 {classes.map((classe) => (
-                  <option key={classe._id} value={classe._id}>
+                  <option key={classe.id} value={classe.id}>
                     {classe.nom} - {classe.cycle}
                   </option>
                 ))}
@@ -165,7 +195,7 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
               >
                 <option value="">Toutes les matières</option>
                 {matieres.map((matiere) => (
-                  <option key={matiere._id} value={matiere._id}>
+                  <option key={matiere.id} value={matiere.id}>
                     {matiere.nom}
                   </option>
                 ))}

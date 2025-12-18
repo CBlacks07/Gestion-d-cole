@@ -65,7 +65,16 @@ export default function EleveFormModal({ isOpen, onClose, onSuccess, eleve }: El
   const loadClasses = async () => {
     try {
       const response = await api.get('/classes')
-      setClasses(response.data)
+
+      // Mapper les classes (backend snake_case -> frontend camelCase)
+      const mappedClasses = response.data.map((data: any) => ({
+        id: data.id,
+        nom: data.nom,
+        cycle: data.cycle,
+        niveau: data.niveau
+      }))
+
+      setClasses(mappedClasses)
     } catch (error) {
       console.error('Erreur lors du chargement des classes', error)
     }

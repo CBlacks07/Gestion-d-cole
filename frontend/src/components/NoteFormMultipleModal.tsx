@@ -45,7 +45,23 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
         api.get('/eleves'),
         api.get('/annees/active')
       ])
-      setEleves(elevesRes.data.filter((e: Eleve) => e.statut === 'actif'))
+
+      // Mapper les élèves (backend snake_case -> frontend camelCase)
+      const mappedEleves = elevesRes.data
+        .map((data: any) => ({
+          id: data.id,
+          matricule: data.matricule,
+          nom: data.nom,
+          prenom: data.prenom,
+          statut: data.statut,
+          classe: data.classe ? {
+            id: data.classe.id,
+            nom: data.classe.nom
+          } : null
+        }))
+        .filter((e: any) => e.statut === 'ACTIF' || e.statut === 'actif')
+
+      setEleves(mappedEleves)
       setAnneeActive(anneeRes.data)
     } catch (error) {
       console.error('Erreur lors du chargement des données', error)
@@ -61,9 +77,9 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
         return
       }
 
-      setFormData(prev => ({ ...prev, classeId: eleve.classe._id }))
+      setFormData(prev => ({ ...prev, classeId: eleve.classe.id }))
 
-      const response = await api.get(`/classe-matieres/classe/${eleve.classe._id}`, {
+      const response = await api.get(`/classe-matieres/classe/${eleve.classe.id}`, {
         params: { annee_scolaire: anneeActive?.annee }
       })
 
@@ -201,7 +217,7 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
               >
                 <option value="">Sélectionner un élève...</option>
                 {eleves.map((eleve) => (
-                  <option key={eleve._id} value={eleve._id}>
+                  <option key={eleve.id} value={eleve.id}>
                     {eleve.prenom} {eleve.nom} - {eleve.classe?.nom || 'Sans classe'}
                   </option>
                 ))}
