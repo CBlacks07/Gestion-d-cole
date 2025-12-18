@@ -81,9 +81,9 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
 
     try {
       const data = {
-        eleve: formData.eleveId,
-        classe: formData.classeId,
-        matiere: formData.matiereId || undefined,
+        eleveId: formData.eleveId,
+        classeId: formData.classeId,
+        matiereId: formData.matiereId || undefined,
         date: formData.date,
         periode: formData.periode,
         justifiee: formData.justifiee,

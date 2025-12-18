@@ -40,9 +40,39 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
         api.get('/matieres'),
         api.get('/classes')
       ])
-      setEleves(elevesRes.data.filter((e: Eleve) => e.statut === 'actif'))
-      setMatieres(matieresRes.data)
-      setClasses(classesRes.data)
+
+      // Mapper les élèves (backend snake_case -> frontend camelCase)
+      const mappedEleves = elevesRes.data
+        .map((data: any) => ({
+          id: data.id,
+          matricule: data.matricule,
+          nom: data.nom,
+          prenom: data.prenom,
+          statut: data.statut,
+          classe: data.classe ? {
+            id: data.classe.id,
+            nom: data.classe.nom
+          } : null
+        }))
+        .filter((e: any) => e.statut === 'ACTIF' || e.statut === 'actif')
+
+      // Mapper les matières
+      const mappedMatieres = matieresRes.data.map((data: any) => ({
+        id: data.id,
+        nom: data.nom,
+        code: data.code
+      }))
+
+      // Mapper les classes
+      const mappedClasses = classesRes.data.map((data: any) => ({
+        id: data.id,
+        nom: data.nom,
+        cycle: data.cycle
+      }))
+
+      setEleves(mappedEleves)
+      setMatieres(mappedMatieres)
+      setClasses(mappedClasses)
     } catch (error) {
       console.error('Erreur lors du chargement des données', error)
     }
@@ -54,9 +84,9 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
 
     try {
       const data = {
-        eleve: formData.eleveId,
-        matiere: formData.matiereId,
-        classe: formData.classeId,
+        eleveId: formData.eleveId,
+        matiereId: formData.matiereId,
+        classeId: formData.classeId,
         typeEvaluation: formData.typeEvaluation,
         periode: formData.periode,
         note: parseFloat(formData.note),

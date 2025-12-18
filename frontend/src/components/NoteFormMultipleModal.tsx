@@ -71,7 +71,7 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
   const loadMatieresClasse = async (eleveId: string) => {
     try {
       setLoadingMatieres(true)
-      const eleve = eleves.find(e => e._id === eleveId)
+      const eleve = eleves.find(e => e.id === eleveId)
       if (!eleve || !eleve.classe) {
         setMatieres([])
         return
@@ -147,9 +147,9 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
       // Créer les notes en parallèle
       const promises = notesToSave.map(matiere => {
         const data = {
-          eleve: formData.eleveId,
-          matiere: matiere.matiere_id,
-          classe: formData.classeId,
+          eleveId: formData.eleveId,
+          matiereId: matiere.matiere_id,
+          classeId: formData.classeId,
           typeEvaluation: formData.typeEvaluation,
           periode: formData.periode,
           note: parseFloat(matiere.note),
