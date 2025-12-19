@@ -7,9 +7,10 @@ interface ClasseFormModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
+  classe?: any | null
 }
 
-export default function ClasseFormModal({ isOpen, onClose, onSuccess }: ClasseFormModalProps) {
+export default function ClasseFormModal({ isOpen, onClose, onSuccess, classe }: ClasseFormModalProps) {
   const [loading, setLoading] = useState(false)
   const [enseignants, setEnseignants] = useState<Enseignant[]>([])
   const [formData, setFormData] = useState({
@@ -27,13 +28,47 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess }: ClasseFo
   useEffect(() => {
     if (isOpen) {
       loadEnseignants()
+      if (classe) {
+        // Pré-remplir le formulaire en mode édition
+        const enumToNiveau: Record<string, string> = {
+          'SIXIEME': '6ème',
+          'CINQUIEME': '5ème',
+          'QUATRIEME': '4ème',
+          'TROISIEME': '3ème',
+          'SECONDE': '2nde',
+          'PREMIERE': '1ère',
+          'TERMINALE': 'Terminale'
+        }
+        const enumToCycle: Record<string, string> = {
+          'PRIMAIRE': 'Primaire',
+          'COLLEGE': 'Collège',
+          'LYCEE': 'Lycée'
+        }
+
+        setFormData({
+          nom: classe.nom || '',
+          niveau: enumToNiveau[classe.niveau] || classe.niveau || '',
+          cycle: enumToCycle[classe.cycle] || classe.cycle || 'Primaire',
+          section: classe.section || '',
+          enseignantPrincipal: classe.enseignantPrincipalId || classe.enseignant_principal_id || '',
+          effectifMax: classe.effectifMax?.toString() || classe.effectif_max?.toString() || '',
+          salle: classe.salle || '',
+          montantInscription: classe.montantInscription?.toString() || classe.montant_inscription?.toString() || '',
+          montantMensuel: classe.montantMensuel?.toString() || classe.montant_mensuel?.toString() || ''
+        })
+      }
+    } else {
+      resetForm()
     }
-  }, [isOpen])
+  }, [isOpen, classe])
 
   const loadEnseignants = async () => {
     try {
       const response = await api.get('/enseignants')
-      setEnseignants(response.data.filter((e: Enseignant) => e.statut === 'actif'))
+      // Filtrer les enseignants actifs (statut en majuscule)
+      setEnseignants(response.data.filter((e: Enseignant) =>
+        e.statut === 'ACTIF' || e.statut === 'actif'
+      ))
     } catch (error) {
       console.error('Erreur lors du chargement des enseignants', error)
     }
@@ -100,20 +135,31 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess }: ClasseFo
         devise: 'XOF'
       }
 
-      await api.post('/classes', data)
+      if (classe) {
+        // Mode édition
+        await api.put(`/classes/${classe.id}`, data)
+      } else {
+        // Mode création
+        await api.post('/classes', data)
+      }
       onSuccess()
       onClose()
       resetForm()
     } catch (error: any) {
-      console.error('Erreur lors de la création de la classe', error)
-      alert(error.response?.data?.message || 'Erreur lors de la création de la classe')
+      console.error('Erreur lors de la sauvegarde de la classe', error)
+      alert(error.response?.data?.message || 'Erreur lors de la sauvegarde de la classe')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Ajouter une nouvelle classe" size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={classe ? 'Modifier la classe' : 'Ajouter une nouvelle classe'}
+      size="lg"
+    >
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Informations de base */}
         <div>

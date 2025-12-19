@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../services/api'
 import { Classe } from '../types'
-import { Plus, Eye } from 'lucide-react'
+import { Plus, Eye, Edit2, Trash2 } from 'lucide-react'
 import ClasseFormModal from '../components/ClasseFormModal'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 export default function Classes() {
   const [classes, setClasses] = useState<Classe[]>([])
   const [loading, setLoading] = useState(true)
   const [cycleFilter, setCycleFilter] = useState<string>('')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [classeToEdit, setClasseToEdit] = useState<Classe | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState({ show: false, id: '', nom: '' })
 
   useEffect(() => {
     loadClasses()
@@ -54,6 +57,26 @@ export default function Classes() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleEdit = (classe: Classe) => {
+    setClasseToEdit(classe)
+    setShowAddModal(true)
+  }
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api.delete(`/classes/${id}`)
+      await loadClasses()
+      setDeleteConfirm({ show: false, id: '', nom: '' })
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Erreur lors de la suppression')
+    }
+  }
+
+  const handleModalClose = () => {
+    setShowAddModal(false)
+    setClasseToEdit(null)
   }
 
   const filteredClasses = cycleFilter
@@ -140,12 +163,29 @@ export default function Classes() {
                       </span>
                     )}
                   </div>
-                  <Link
-                    to={`/classes/${classe.id}`}
-                    className="text-primary-600 hover:text-primary-700"
-                  >
-                    <Eye className="h-5 w-5" />
-                  </Link>
+                  <div className="flex gap-2">
+                    <Link
+                      to={`/classes/${classe.id}`}
+                      className="p-1 text-primary-600 hover:bg-primary-100 rounded transition-colors"
+                      title="Voir détails"
+                    >
+                      <Eye className="h-5 w-5" />
+                    </Link>
+                    <button
+                      onClick={() => handleEdit(classe)}
+                      className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                      title="Modifier"
+                    >
+                      <Edit2 className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm({ show: true, id: classe.id, nom: classe.nom })}
+                      className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -185,11 +225,24 @@ export default function Classes() {
         </div>
       ))}
 
-      {/* Modal pour ajouter une classe */}
+      {/* Modal pour ajouter/modifier une classe */}
       <ClasseFormModal
         isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
+        onClose={handleModalClose}
         onSuccess={loadClasses}
+        classe={classeToEdit}
+      />
+
+      {/* Dialog de confirmation de suppression */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.show}
+        title="Supprimer la classe"
+        message={`Êtes-vous sûr de vouloir supprimer la classe "${deleteConfirm.nom}" ? Cette action est irréversible.`}
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        onConfirm={() => handleDelete(deleteConfirm.id)}
+        onCancel={() => setDeleteConfirm({ show: false, id: '', nom: '' })}
+        variant="danger"
       />
     </div>
   )
