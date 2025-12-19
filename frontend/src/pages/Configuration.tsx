@@ -85,14 +85,18 @@ export default function Configuration() {
   const openMatiereModal = (matiere?: any) => {
     if (matiere) {
       setEditingMatiere(matiere)
+      // S'assurer que cycles et niveaux sont des tableaux
+      const cycles = Array.isArray(matiere.cycles) ? matiere.cycles : []
+      const niveaux = Array.isArray(matiere.niveaux) ? matiere.niveaux : []
+
       setMatiereForm({
         nom: matiere.nom,
         code: matiere.code,
         description: matiere.description || '',
         coefficient: matiere.coefficient,
-        cycles: matiere.cycles || [],
-        niveaux: matiere.niveaux || [],
-        couleur: matiere.couleur
+        cycles: cycles,
+        niveaux: niveaux,
+        couleur: matiere.couleur || '#3B82F6'
       })
     } else {
       setEditingMatiere(null)

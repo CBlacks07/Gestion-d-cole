@@ -2,26 +2,39 @@ import { AlertTriangle } from 'lucide-react'
 
 interface ConfirmDialogProps {
   isOpen: boolean
-  onClose: () => void
+  onClose?: () => void
+  onCancel?: () => void
   onConfirm: () => void
   title: string
   message: string
   confirmText?: string
+  confirmLabel?: string
   cancelText?: string
+  cancelLabel?: string
   type?: 'danger' | 'warning' | 'info'
+  variant?: 'danger' | 'warning' | 'info'
 }
 
 export default function ConfirmDialog({
   isOpen,
   onClose,
+  onCancel,
   onConfirm,
   title,
   message,
-  confirmText = 'Confirmer',
-  cancelText = 'Annuler',
-  type = 'warning'
+  confirmText,
+  confirmLabel,
+  cancelText,
+  cancelLabel,
+  type,
+  variant
 }: ConfirmDialogProps) {
   if (!isOpen) return null
+
+  const handleClose = onClose || onCancel || (() => {})
+  const displayType = type || variant || 'warning'
+  const displayConfirmText = confirmText || confirmLabel || 'Confirmer'
+  const displayCancelText = cancelText || cancelLabel || 'Annuler'
 
   const typeColors = {
     danger: 'bg-red-100 text-red-600',
@@ -41,14 +54,14 @@ export default function ConfirmDialog({
         {/* Backdrop */}
         <div
           className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
-          onClick={onClose}
+          onClick={handleClose}
         />
 
         {/* Dialog */}
         <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md z-50">
           <div className="p-6">
             {/* Icon */}
-            <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${typeColors[type]} mb-4`}>
+            <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${typeColors[displayType]} mb-4`}>
               <AlertTriangle className="h-6 w-6" />
             </div>
 
@@ -61,19 +74,19 @@ export default function ConfirmDialog({
             {/* Actions */}
             <div className="mt-6 flex gap-3">
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors"
               >
-                {cancelText}
+                {displayCancelText}
               </button>
               <button
                 onClick={() => {
                   onConfirm()
-                  onClose()
+                  handleClose()
                 }}
-                className={`flex-1 px-4 py-2 text-white rounded-lg font-medium transition-colors ${buttonColors[type]}`}
+                className={`flex-1 px-4 py-2 text-white rounded-lg font-medium transition-colors ${buttonColors[displayType]}`}
               >
-                {confirmText}
+                {displayConfirmText}
               </button>
             </div>
           </div>
