@@ -75,7 +75,14 @@ export default function EleveDetail() {
     setLoadingModal(true)
     setShowNotesModal(true)
     try {
-      const response = await api.get(`/notes/bulletin/${id}`)
+      // Récupérer l'année scolaire active ou utiliser l'année courante
+      const currentYear = new Date().getFullYear()
+      const anneeScolaire = eleve.annee_scolaire || `${currentYear}-${currentYear + 1}`
+      const periode = '1er Trimestre' // Par défaut, peut être modifié plus tard
+
+      const response = await api.get(`/notes/bulletin/${id}`, {
+        params: { periode, anneeScolaire }
+      })
       setNotesData(response.data)
     } catch (error: any) {
       console.error('Erreur lors du chargement des notes', error)
@@ -368,7 +375,16 @@ export default function EleveDetail() {
           <div className="text-center py-8">Chargement...</div>
         ) : (
           <div className="max-h-96 overflow-y-auto">
-            {paiementsData && paiementsData.length > 0 ? (
+            {paiementsData?.totalPaye !== undefined && (
+              <div className="mb-4 p-4 bg-primary-50 rounded-lg">
+                <p className="text-sm text-gray-600">Total payé</p>
+                <p className="text-2xl font-bold text-primary-600">
+                  {paiementsData.totalPaye.toLocaleString()} {paiementsData.devise || 'XOF'}
+                </p>
+              </div>
+            )}
+
+            {paiementsData?.paiements && paiementsData.paiements.length > 0 ? (
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
@@ -380,12 +396,12 @@ export default function EleveDetail() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paiementsData.map((paiement: any) => (
+                  {paiementsData.paiements.map((paiement: any) => (
                     <tr key={paiement.id} className="border-b">
                       <td className="py-2">{formatDate(paiement.datePaiement || paiement.date_paiement)}</td>
                       <td>{paiement.typePaiement || paiement.type_paiement}</td>
                       <td className="text-right font-medium">
-                        {paiement.montant.toLocaleString()} {paiement.devise || 'XOF'}
+                        {paiement.montant.toLocaleString()} {paiementsData.devise || 'XOF'}
                       </td>
                       <td>{paiement.modePaiement || paiement.mode_paiement}</td>
                       <td>
@@ -405,14 +421,6 @@ export default function EleveDetail() {
               </table>
             ) : (
               <p className="text-center py-8 text-gray-500">Aucun paiement enregistré</p>
-            )}
-
-            {paiementsData && paiementsData.length > 0 && (
-              <div className="mt-6 pt-4 border-t">
-                <p className="text-right font-bold">
-                  Total: {paiementsData.reduce((sum: number, p: any) => sum + p.montant, 0).toLocaleString()} XOF
-                </p>
-              </div>
             )}
           </div>
         )}
