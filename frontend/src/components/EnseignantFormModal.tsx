@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import api from '../services/api'
+import { Enseignant } from '../types'
 
 interface EnseignantFormModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
+  enseignant?: Enseignant | null
 }
 
-export default function EnseignantFormModal({ isOpen, onClose, onSuccess }: EnseignantFormModalProps) {
+export default function EnseignantFormModal({ isOpen, onClose, onSuccess, enseignant }: EnseignantFormModalProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     nom: '',
@@ -23,6 +25,27 @@ export default function EnseignantFormModal({ isOpen, onClose, onSuccess }: Ense
     salaire: ''
   })
 
+  useEffect(() => {
+    if (isOpen && enseignant) {
+      // Mode édition - pré-remplir le formulaire
+      setFormData({
+        nom: enseignant.nom || '',
+        prenom: enseignant.prenom || '',
+        dateNaissance: enseignant.dateNaissance ? enseignant.dateNaissance.split('T')[0] : '',
+        sexe: enseignant.sexe || 'M',
+        telephone: enseignant.telephone || '',
+        email: enseignant.email || '',
+        adresse: enseignant.adresse || '',
+        typeContrat: enseignant.typeContrat || 'contractuel',
+        statut: enseignant.statut || 'actif',
+        salaire: enseignant.salaire ? enseignant.salaire.toString() : ''
+      })
+    } else if (isOpen) {
+      // Mode création - réinitialiser le formulaire
+      resetForm()
+    }
+  }, [isOpen, enseignant])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -31,18 +54,25 @@ export default function EnseignantFormModal({ isOpen, onClose, onSuccess }: Ense
       const data = {
         ...formData,
         salaire: formData.salaire ? parseFloat(formData.salaire) : undefined,
-        dateRecrutement: new Date().toISOString(),
-        diplomes: [],
-        specialites: []
+        dateRecrutement: enseignant?.dateRecrutement || new Date().toISOString(),
+        diplomes: enseignant?.diplomes || [],
+        specialites: enseignant?.specialites || []
       }
 
-      await api.post('/enseignants', data)
+      if (enseignant) {
+        // Mode édition
+        await api.put(`/enseignants/${enseignant.id || enseignant._id}`, data)
+      } else {
+        // Mode création
+        await api.post('/enseignants', data)
+      }
+
       onSuccess()
       onClose()
       resetForm()
     } catch (error: any) {
-      console.error('Erreur lors de la création de l\'enseignant', error)
-      alert(error.response?.data?.message || 'Erreur lors de la création de l\'enseignant')
+      console.error('Erreur lors de l\'enregistrement de l\'enseignant', error)
+      alert(error.response?.data?.message || 'Erreur lors de l\'enregistrement de l\'enseignant')
     } finally {
       setLoading(false)
     }
@@ -64,7 +94,12 @@ export default function EnseignantFormModal({ isOpen, onClose, onSuccess }: Ense
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Ajouter un nouvel enseignant" size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={enseignant ? "Modifier l'enseignant" : "Ajouter un nouvel enseignant"}
+      size="lg"
+    >
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Informations personnelles */}
         <div>
