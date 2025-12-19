@@ -35,7 +35,7 @@ Créer un nouvel utilisateur
   "prenom": "John",
   "email": "john@example.com",
   "role": "secretaire",
-  "token": "eyJhbGciOiJIUzI1NiIs..."
+  "token": "JWT_TOKEN_SERA_GENERE_ICI"
 }
 ```
 

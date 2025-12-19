@@ -79,9 +79,11 @@ cp .env.example .env      # Linux/Mac
 Le fichier `.env` est déjà configuré avec:
 ```env
 PORT=5000
-DATABASE_URL="postgresql://gestion_user:Admin@localhost:5432/Ecole?schema=public"
+DATABASE_URL="postgresql://[USERNAME]:[PASSWORD]@localhost:5432/Ecole?schema=public"
 JWT_SECRET=votre_secret_jwt_tres_securise_ici
 NODE_ENV=development
+
+# Remplacer [USERNAME] par gestion_user et [PASSWORD] par votre mot de passe
 ```
 
 ### 5. Créer les tables (Simple !)

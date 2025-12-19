@@ -353,10 +353,16 @@ exports.getElevesStats = async (req, res) => {
     );
 
     // Élèves actifs
-    const actifsResult = await query(
-      `SELECT COUNT(*) as count FROM eleves ${whereClause ? whereClause + ' AND' : 'WHERE'} statut = 'ACTIF' ${whereClause ? '' : ''}`,
-      whereClause ? [...params] : []
-    );
+    let actifsQuery = 'SELECT COUNT(*) as count FROM eleves ';
+    let actifsParams = [];
+    if (anneeScolaire) {
+      actifsQuery += 'WHERE annee_scolaire = $1 AND statut = $2';
+      actifsParams = [anneeScolaire, 'ACTIF'];
+    } else {
+      actifsQuery += 'WHERE statut = $1';
+      actifsParams = ['ACTIF'];
+    }
+    const actifsResult = await query(actifsQuery, actifsParams);
 
     // Par sexe
     const parSexeResult = await query(
