@@ -191,18 +191,18 @@ exports.getRapportFinancier = async (req, res) => {
   try {
     const { anneeScolaire, mois } = req.query;
 
-    let whereClause = "WHERE statut = 'VALIDE'";
+    let whereClause = "WHERE p.statut = 'VALIDE'";
     const params = [];
     let paramIndex = 1;
 
     if (anneeScolaire) {
-      whereClause += ` AND annee_scolaire = $${paramIndex}`;
+      whereClause += ` AND p.annee_scolaire = $${paramIndex}`;
       params.push(anneeScolaire);
       paramIndex++;
     }
 
     if (mois) {
-      whereClause += ` AND mois_concerne = $${paramIndex}`;
+      whereClause += ` AND p.mois_concerne = $${paramIndex}`;
       params.push(mois);
       paramIndex++;
     }
@@ -242,7 +242,8 @@ exports.getRapportFinancier = async (req, res) => {
     // Par type de paiement
     const parTypeResult = await query(
       `SELECT type_paiement, SUM(montant) as total, COUNT(*) as count
-       FROM paiements ${whereClause}
+       FROM paiements p
+       ${whereClause}
        GROUP BY type_paiement`,
       params
     );
@@ -256,7 +257,8 @@ exports.getRapportFinancier = async (req, res) => {
     // Par mode de paiement
     const parModePaiementResult = await query(
       `SELECT mode_paiement, SUM(montant) as total, COUNT(*) as count
-       FROM paiements ${whereClause}
+       FROM paiements p
+       ${whereClause}
        GROUP BY mode_paiement`,
       params
     );
