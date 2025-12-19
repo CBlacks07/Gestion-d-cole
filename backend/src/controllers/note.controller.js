@@ -155,6 +155,25 @@ exports.getNoteById = async (req, res) => {
   }
 };
 
+// Fonction utilitaire pour convertir les périodes
+const convertPeriode = (periode) => {
+  if (!periode) return null;
+
+  const periodeMap = {
+    '1ER TRIMESTRE': 'PREMIER_TRIMESTRE',
+    '2ÈME TRIMESTRE': 'DEUXIEME_TRIMESTRE',
+    '2EME TRIMESTRE': 'DEUXIEME_TRIMESTRE',
+    '3ÈME TRIMESTRE': 'TROISIEME_TRIMESTRE',
+    '3EME TRIMESTRE': 'TROISIEME_TRIMESTRE',
+    'PREMIER TRIMESTRE': 'PREMIER_TRIMESTRE',
+    'DEUXIEME TRIMESTRE': 'DEUXIEME_TRIMESTRE',
+    'TROISIEME TRIMESTRE': 'TROISIEME_TRIMESTRE'
+  };
+
+  const normalized = periode.toUpperCase();
+  return periodeMap[normalized] || normalized.replace(/ /g, '_');
+};
+
 exports.createNote = async (req, res) => {
   try {
     const data = { ...req.body };
@@ -162,7 +181,7 @@ exports.createNote = async (req, res) => {
     // Convertir les enums en majuscules
     if (data.typeEvaluation) data.typeEvaluation = data.typeEvaluation.toUpperCase();
     if (data.type_evaluation) data.type_evaluation = data.type_evaluation.toUpperCase();
-    if (data.periode) data.periode = data.periode.toUpperCase();
+    if (data.periode) data.periode = convertPeriode(data.periode);
 
     const result = await query(
       `INSERT INTO notes (
@@ -199,7 +218,7 @@ exports.updateNote = async (req, res) => {
     // Convertir les enums en majuscules
     if (data.typeEvaluation) data.typeEvaluation = data.typeEvaluation.toUpperCase();
     if (data.type_evaluation) data.type_evaluation = data.type_evaluation.toUpperCase();
-    if (data.periode) data.periode = data.periode.toUpperCase();
+    if (data.periode) data.periode = convertPeriode(data.periode);
 
     // Construire la requête dynamiquement
     const fields = [];
@@ -322,7 +341,7 @@ exports.getBulletin = async (req, res) => {
        FROM notes n
        JOIN matieres m ON n.matiere_id = m.id
        WHERE n.eleve_id = $1 AND n.periode = $2 AND n.annee_scolaire = $3`,
-      [eleveId, periode.toUpperCase(), anneeScolaire]
+      [eleveId, convertPeriode(periode), anneeScolaire]
     );
 
     // Calculer les moyennes par matière

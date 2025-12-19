@@ -3,7 +3,7 @@ import api from '../services/api'
 import { Note } from '../types'
 import { Plus, Search, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
-import NoteFormMultipleModal from '../components/NoteFormMultipleModal'
+import NoteFormClasseModal from '../components/NoteFormClasseModal'
 
 export default function Notes() {
   const [notes, setNotes] = useState<Note[]>([])
@@ -76,7 +76,7 @@ export default function Notes() {
           className="btn btn-primary flex items-center"
         >
           <Plus className="h-5 w-5 mr-2" />
-          Nouvelle note
+          Saisir les notes par classe
         </button>
       </div>
 
@@ -138,7 +138,7 @@ export default function Notes() {
       </div>
 
       {/* Modal pour ajouter des notes */}
-      <NoteFormMultipleModal
+      <NoteFormClasseModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onSuccess={loadNotes}
