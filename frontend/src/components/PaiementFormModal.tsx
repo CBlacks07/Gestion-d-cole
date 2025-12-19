@@ -14,11 +14,11 @@ export default function PaiementFormModal({ isOpen, onClose, onSuccess }: Paieme
   const [eleves, setEleves] = useState<Eleve[]>([])
   const [formData, setFormData] = useState({
     eleveId: '',
-    typePaiement: 'Scolarité',
+    typePaiement: 'SCOLARITE',
     montant: '',
     datePaiement: new Date().toISOString().split('T')[0],
     moisConcerne: '',
-    modePaiement: 'Espèces',
+    modePaiement: 'ESPECES',
     numeroPiece: '',
     remarques: ''
   })
@@ -88,11 +88,11 @@ export default function PaiementFormModal({ isOpen, onClose, onSuccess }: Paieme
   const resetForm = () => {
     setFormData({
       eleveId: '',
-      typePaiement: 'Scolarité',
+      typePaiement: 'SCOLARITE',
       montant: '',
       datePaiement: new Date().toISOString().split('T')[0],
       moisConcerne: '',
-      modePaiement: 'Espèces',
+      modePaiement: 'ESPECES',
       numeroPiece: '',
       remarques: ''
     })
@@ -137,12 +137,12 @@ export default function PaiementFormModal({ isOpen, onClose, onSuccess }: Paieme
                 value={formData.typePaiement}
                 onChange={(e) => setFormData({ ...formData, typePaiement: e.target.value })}
               >
-                <option value="Inscription">Inscription</option>
-                <option value="Scolarité">Scolarité</option>
-                <option value="Cantine">Cantine</option>
-                <option value="Transport">Transport</option>
-                <option value="Uniforme">Uniforme</option>
-                <option value="Autres">Autres</option>
+                <option value="INSCRIPTION">Inscription</option>
+                <option value="SCOLARITE">Scolarité</option>
+                <option value="CANTINE">Cantine</option>
+                <option value="TRANSPORT">Transport</option>
+                <option value="UNIFORME">Uniforme</option>
+                <option value="AUTRES">Autres</option>
               </select>
             </div>
             <div>
@@ -171,7 +171,7 @@ export default function PaiementFormModal({ isOpen, onClose, onSuccess }: Paieme
                 onChange={(e) => setFormData({ ...formData, datePaiement: e.target.value })}
               />
             </div>
-            {formData.typePaiement === 'Scolarité' && (
+            {formData.typePaiement === 'SCOLARITE' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Mois concerné
@@ -206,13 +206,13 @@ export default function PaiementFormModal({ isOpen, onClose, onSuccess }: Paieme
                 value={formData.modePaiement}
                 onChange={(e) => setFormData({ ...formData, modePaiement: e.target.value })}
               >
-                <option value="Espèces">Espèces</option>
-                <option value="Chèque">Chèque</option>
-                <option value="Virement">Virement</option>
-                <option value="Mobile Money">Mobile Money</option>
+                <option value="ESPECES">Espèces</option>
+                <option value="CHEQUE">Chèque</option>
+                <option value="VIREMENT">Virement</option>
+                <option value="MOBILE_MONEY">Mobile Money</option>
               </select>
             </div>
-            {formData.modePaiement !== 'Espèces' && (
+            {formData.modePaiement !== 'ESPECES' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Numéro de pièce
@@ -221,9 +221,9 @@ export default function PaiementFormModal({ isOpen, onClose, onSuccess }: Paieme
                   type="text"
                   className="input"
                   placeholder={
-                    formData.modePaiement === 'Chèque'
+                    formData.modePaiement === 'CHEQUE'
                       ? 'Numéro de chèque'
-                      : formData.modePaiement === 'Virement'
+                      : formData.modePaiement === 'VIREMENT'
                       ? 'Référence virement'
                       : 'Référence transaction'
                   }
