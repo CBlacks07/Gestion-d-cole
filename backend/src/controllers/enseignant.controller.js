@@ -127,6 +127,15 @@ exports.createEnseignant = async (req, res) => {
     if (data.sexe) data.sexe = data.sexe.toUpperCase();
     if (data.typeContrat) data.typeContrat = data.typeContrat.toUpperCase();
 
+    // Générer le matricule automatiquement si non fourni
+    let matricule = data.matricule;
+    if (!matricule) {
+      const year = new Date().getFullYear();
+      const countResult = await query('SELECT COUNT(*) as count FROM enseignants');
+      const count = parseInt(countResult.rows[0].count) + 1;
+      matricule = `EN${year}${count.toString().padStart(3, '0')}`;
+    }
+
     const result = await query(
       `INSERT INTO enseignants (
         matricule, nom, prenom, date_naissance, sexe, telephone, email, adresse,
@@ -134,24 +143,26 @@ exports.createEnseignant = async (req, res) => {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       [
-        data.matricule,
+        matricule,
         data.nom,
         data.prenom,
         data.dateNaissance || data.date_naissance,
         data.sexe,
         data.telephone,
-        data.email,
-        data.adresse,
+        data.email || null,
+        data.adresse || null,
         JSON.stringify(data.diplomes || []),
         data.dateRecrutement || data.date_recrutement || new Date(),
         data.statut || 'ACTIF',
-        data.typeContrat || data.type_contrat || 'CDI',
-        data.salaire
+        data.typeContrat || data.type_contrat || 'PERMANENT',
+        data.salaire || null
       ]
     );
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
+    console.error('❌ Erreur création enseignant:', error.message);
+    console.error('Détails:', error.detail || error.hint || error);
     res.status(400).json({ message: error.message });
   }
 };

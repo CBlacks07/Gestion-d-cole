@@ -146,6 +146,21 @@ exports.createPaiement = async (req, res) => {
     if (data.mode_paiement) data.mode_paiement = data.mode_paiement.toUpperCase();
     if (data.statut) data.statut = data.statut.toUpperCase();
 
+    // Récupérer l'année scolaire active si non fournie
+    let anneeScolaire = data.anneeScolaire || data.annee_scolaire;
+    if (!anneeScolaire) {
+      const anneeActiveResult = await query(
+        'SELECT annee FROM annees_scolaires WHERE active = true LIMIT 1'
+      );
+      if (anneeActiveResult.rows.length > 0) {
+        anneeScolaire = anneeActiveResult.rows[0].annee;
+      } else {
+        // Fallback: utiliser l'année courante
+        const year = new Date().getFullYear();
+        anneeScolaire = `${year}-${year + 1}`;
+      }
+    }
+
     const result = await query(
       `INSERT INTO paiements (
         eleve_id, type_paiement, montant, devise, date_paiement, mois_concerne,
@@ -159,7 +174,7 @@ exports.createPaiement = async (req, res) => {
         data.devise || 'XOF',
         data.datePaiement || data.date_paiement || new Date(),
         data.moisConcerne || data.mois_concerne || null,
-        data.anneeScolaire || data.annee_scolaire,
+        anneeScolaire,
         data.modePaiement || data.mode_paiement,
         data.numeroPiece || data.numero_piece || null,
         data.statut || 'VALIDE',
