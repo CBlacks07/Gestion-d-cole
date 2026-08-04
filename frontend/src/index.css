@@ -1,47 +1,189 @@
+/* Space Grotesk (titres) + IBM Plex Sans (corps) + IBM Plex Mono (chiffres) */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(12px) scale(0.96); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+.animate-slide-in {
+  animation: slide-in 0.25s ease-out both;
+}
+
+@keyframes bounce-once {
+  0%   { transform: scale(0.5); opacity: 0; }
+  50%  { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-bounce-once {
+  animation: bounce-once 0.4s ease-out both;
+}
+
+@keyframes shrink-width {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
+
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900;
+    @apply bg-cream-100 text-gray-900 antialiased dark:bg-forest-900;
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #D8CFB4; border-radius: 8px; }
+  html.dark ::-webkit-scrollbar-thumb { background: #2C4535; }
 }
 
 @layer components {
+  /* ── Boutons ── */
   .btn {
-    @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
+    @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg
+           font-medium text-sm transition-all duration-150 outline-none
+           focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1;
   }
-
   .btn-primary {
-    @apply bg-primary-600 text-white hover:bg-primary-700;
+    @apply bg-primary-500 text-forest-900 font-semibold hover:bg-primary-400 active:bg-primary-600 shadow-sm;
   }
-
   .btn-secondary {
-    @apply bg-gray-200 text-gray-700 hover:bg-gray-300;
+    @apply bg-white text-gray-700 border border-cream-300 hover:bg-cream-50 shadow-sm
+           dark:bg-forest-800 dark:text-gray-200 dark:border-forest-600 dark:hover:bg-forest-700;
   }
-
   .btn-danger {
-    @apply bg-red-600 text-white hover:bg-red-700;
+    @apply bg-red-600 text-white hover:bg-red-700 shadow-sm;
+  }
+  .btn-ghost {
+    @apply text-gray-500 hover:text-gray-900 hover:bg-cream-100
+           dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-forest-700;
   }
 
+  /* ── Input ── */
   .input {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply w-full px-3 py-2 border border-cream-300 rounded-lg text-sm bg-white
+           text-gray-900 placeholder-gray-400
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+           transition-shadow
+           dark:bg-forest-800 dark:border-forest-600 dark:text-gray-100
+           dark:placeholder-gray-500;
   }
 
+  /* ── Cards ── */
   .card {
-    @apply bg-white rounded-lg shadow-md p-6;
+    @apply bg-white rounded-2xl p-6 border border-cream-300 shadow-card
+           dark:bg-forest-800 dark:border-forest-600;
+  }
+  /* padding compact (filtres, petites sections) */
+  .card-sm {
+    @apply bg-white rounded-2xl p-4 border border-cream-300 shadow-card
+           dark:bg-forest-800 dark:border-forest-600;
+  }
+  /* sans padding (tables) */
+  .card-flush {
+    @apply bg-white rounded-2xl overflow-hidden border border-cream-300 shadow-card
+           dark:bg-forest-800 dark:border-forest-600;
   }
 
-  .table {
-    @apply min-w-full divide-y divide-gray-200;
+  /* ── Boutons icônes de tableau ── */
+  .icon-btn {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-lg
+           border border-cream-300 bg-white text-gray-500
+           transition-colors hover:border-primary-400 hover:text-primary-700
+           dark:border-forest-600 dark:bg-forest-800;
+  }
+  .icon-btn-danger {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-lg
+           border border-red-100 bg-red-50 text-red-400
+           transition-colors hover:border-red-300 hover:text-red-600;
   }
 
-  .table-header {
-    @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+  /* ── Tables ── */
+  .table-th {
+    @apply px-4 py-3 text-left text-[11px] font-bold text-gray-400
+           uppercase tracking-wider bg-cream-50 dark:bg-forest-700/50;
+  }
+  .table-td {
+    @apply px-4 py-3 text-sm text-gray-700 dark:text-gray-300;
   }
 
-  .table-cell {
-    @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;
+  /* ── Badge ── */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
   }
+
+  /* ── Boutons compacts (toolbar, filtres) ── */
+  .btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+  .btn-xs {
+    @apply px-2 py-1 text-xs;
+  }
+
+  /* ── Input compact (filtres, toolbar) ── */
+  .input-sm {
+    @apply py-1.5 text-sm;
+  }
+  .input-xs {
+    @apply py-1 text-xs;
+  }
+
+  /* ── Page header ── */
+  .page-title {
+    @apply text-xl font-bold font-display text-gray-900 dark:text-gray-100;
+  }
+  .page-subtitle {
+    @apply text-sm text-gray-400 mt-0.5;
+  }
+}
+
+/* ── Palette chaude globale (light) ── */
+@layer utilities {
+  .text-gray-900 { color: #1B2420 }
+  .text-gray-800 { color: #2B342C }
+  .text-gray-700 { color: #3A4139 }
+  .text-gray-600 { color: #565D53 }
+  .text-gray-500 { color: #6E7568 }
+  .text-gray-400 { color: #8B9285 }
+
+  .bg-slate-50, .bg-gray-50 { background-color: #FAF6EC }
+  .bg-gray-100 { background-color: #EFEADC }
+  .bg-gray-200 { background-color: #E6DFC9 }
+
+  .hover\:bg-gray-50:hover  { background-color: #FAF6EC }
+  .hover\:bg-gray-100:hover { background-color: #EFEADC }
+
+  .border-gray-100 { border-color: #F0EBDC }
+  .border-gray-200 { border-color: #E6DFC9 }
+  .border-gray-300 { border-color: #D8CFB4 }
+
+  .divide-gray-50  > * + * { border-color: #F0EBDC }
+  .divide-gray-100 > * + * { border-color: #E6DFC9 }
+}
+
+/* ── Dark mode : variante vert forêt ── */
+@layer utilities {
+  html.dark .text-gray-900 { color: rgb(243 239 226) }
+  html.dark .text-gray-800 { color: rgb(220 229 220) }
+  html.dark .text-gray-700 { color: rgb(200 212 200) }
+  html.dark .text-gray-600 { color: rgb(159 176 162) }
+  html.dark .text-gray-500 { color: rgb(140 160 145) }
+  html.dark .text-gray-400 { color: rgb(140 160 145) }
+
+  html.dark .bg-white      { background-color: #16241C }
+  html.dark .bg-slate-50   { background-color: #0F1912 }
+  html.dark .bg-gray-50    { background-color: #1C3327 }
+  html.dark .bg-gray-100   { background-color: #223930 }
+  html.dark .bg-gray-200   { background-color: #2C4535 }
+
+  html.dark .hover\:bg-gray-50:hover  { background-color: #1C3327 }
+  html.dark .hover\:bg-gray-100:hover { background-color: #223930 }
+
+  html.dark .border-gray-100 { border-color: #223930 }
+  html.dark .border-gray-200 { border-color: #2C4535 }
+  html.dark .border-gray-300 { border-color: #2C5745 }
+
+  html.dark .divide-gray-50  > * + * { border-color: #223930 }
+  html.dark .divide-gray-100 > * + * { border-color: #2C4535 }
 }

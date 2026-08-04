@@ -84,7 +84,7 @@ export interface Note {
   classe: Classe
   enseignant?: Enseignant
   typeEvaluation: 'Devoir' | 'Composition' | 'Interrogation' | 'TP' | 'Examen'
-  periode: '1er Trimestre' | '2ème Trimestre' | '3ème Trimestre'
+  periode: '1er Trimestre' | '2eme Trimestre' | '3eme Trimestre' | '1er Semestre' | '2eme Semestre'
   anneeScolaire: string
   note: number
   noteMax: number

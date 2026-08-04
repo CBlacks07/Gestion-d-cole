@@ -58,7 +58,7 @@ export default function ConfirmDialog({
         />
 
         {/* Dialog */}
-        <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md z-50">
+        <div className="relative bg-white dark:bg-forest-800 rounded-2xl shadow-xl w-full max-w-md z-50">
           <div className="p-6">
             {/* Icon */}
             <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${typeColors[displayType]} mb-4`}>
@@ -67,7 +67,7 @@ export default function ConfirmDialog({
 
             {/* Title and Message */}
             <div className="text-center">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">{title}</h3>
+              <h3 className="text-lg font-display font-semibold text-gray-900 mb-2">{title}</h3>
               <p className="text-sm text-gray-500">{message}</p>
             </div>
 

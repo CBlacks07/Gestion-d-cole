@@ -1,10 +1,79 @@
 const { query } = require('../lib/db');
+const { parsePagination, paginatedResponse } = require('../lib/pagination');
+const logger = require('../lib/logger');
+
+function formatEleves(rows) {
+  return rows.map(row => {
+    const eleve = {
+      id: row.id,
+      matricule: row.matricule,
+      nom: row.nom,
+      prenom: row.prenom,
+      date_naissance: row.date_naissance,
+      lieu_naissance: row.lieu_naissance,
+      sexe: row.sexe,
+      classe_id: row.classe_id,
+      tuteur_nom: row.tuteur_nom,
+      tuteur_prenom: row.tuteur_prenom,
+      tuteur_telephone: row.tuteur_telephone,
+      tuteur_email: row.tuteur_email,
+      tuteur_adresse: row.tuteur_adresse,
+      groupe_sanguin: row.groupe_sanguin,
+      allergies: row.allergies,
+      maladies_chroniques: row.maladies_chroniques,
+      statut: row.statut,
+      annee_scolaire: row.annee_scolaire,
+      date_inscription: row.date_inscription,
+      created_at: row.created_at,
+      updated_at: row.updated_at
+    };
+    if (row.classe_id) {
+      eleve.classe = {
+        id: row.classe_id,
+        nom: row.classe_nom,
+        niveau: row.classe_niveau,
+        cycle: row.classe_cycle,
+        section: row.classe_section
+      };
+    }
+    return eleve;
+  });
+}
 
 // @desc    Obtenir tous les élèves
 // @route   GET /api/eleves
 exports.getEleves = async (req, res) => {
   try {
-    const { classe, statut, anneeScolaire, search } = req.query;
+    const { classe, statut, anneeScolaire, search, all } = req.query;
+    const noPagination = all === 'true';
+
+    let where = 'WHERE 1=1';
+    const params = [];
+    let paramIndex = 1;
+
+    if (classe) {
+      where += ` AND e.classe_id = $${paramIndex}`;
+      params.push(classe);
+      paramIndex++;
+    }
+
+    if (statut) {
+      where += ` AND e.statut = $${paramIndex}`;
+      params.push(statut.toUpperCase());
+      paramIndex++;
+    }
+
+    if (anneeScolaire) {
+      where += ` AND e.annee_scolaire = $${paramIndex}`;
+      params.push(anneeScolaire);
+      paramIndex++;
+    }
+
+    if (search) {
+      where += ` AND (e.nom ILIKE $${paramIndex} OR e.prenom ILIKE $${paramIndex} OR e.matricule ILIKE $${paramIndex})`;
+      params.push(`%${search}%`);
+      paramIndex++;
+    }
 
     let sql = `
       SELECT e.*,
@@ -12,78 +81,27 @@ exports.getEleves = async (req, res) => {
              c.cycle as classe_cycle, c.section as classe_section
       FROM eleves e
       LEFT JOIN classes c ON e.classe_id = c.id
-      WHERE 1=1
+      ${where}
+      ORDER BY e.nom ASC, e.prenom ASC
     `;
-    const params = [];
-    let paramIndex = 1;
 
-    if (classe) {
-      sql += ` AND e.classe_id = $${paramIndex}`;
-      params.push(classe);
-      paramIndex++;
+    let total;
+    if (!noPagination) {
+      const { page, limit, offset } = parsePagination(req.query);
+      const countResult = await query(
+        `SELECT COUNT(*) as total FROM eleves e ${where}`,
+        params
+      );
+      total = parseInt(countResult.rows[0].total, 10);
+
+      sql += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      const result = await query(sql, [...params, limit, offset]);
+      const eleves = formatEleves(result.rows);
+      return res.json(paginatedResponse(eleves, total, page, limit));
     }
-
-    if (statut) {
-      sql += ` AND e.statut = $${paramIndex}`;
-      params.push(statut.toUpperCase());
-      paramIndex++;
-    }
-
-    if (anneeScolaire) {
-      sql += ` AND e.annee_scolaire = $${paramIndex}`;
-      params.push(anneeScolaire);
-      paramIndex++;
-    }
-
-    if (search) {
-      sql += ` AND (e.nom ILIKE $${paramIndex} OR e.prenom ILIKE $${paramIndex} OR e.matricule ILIKE $${paramIndex})`;
-      params.push(`%${search}%`);
-      paramIndex++;
-    }
-
-    sql += ` ORDER BY e.nom ASC, e.prenom ASC`;
 
     const result = await query(sql, params);
-
-    // Reformater les résultats pour inclure la classe comme objet séparé
-    const eleves = result.rows.map(row => {
-      const eleve = {
-        id: row.id,
-        matricule: row.matricule,
-        nom: row.nom,
-        prenom: row.prenom,
-        date_naissance: row.date_naissance,
-        lieu_naissance: row.lieu_naissance,
-        sexe: row.sexe,
-        classe_id: row.classe_id,
-        tuteur_nom: row.tuteur_nom,
-        tuteur_prenom: row.tuteur_prenom,
-        tuteur_telephone: row.tuteur_telephone,
-        tuteur_email: row.tuteur_email,
-        tuteur_adresse: row.tuteur_adresse,
-        groupe_sanguin: row.groupe_sanguin,
-        allergies: row.allergies,
-        maladies_chroniques: row.maladies_chroniques,
-        statut: row.statut,
-        annee_scolaire: row.annee_scolaire,
-        date_inscription: row.date_inscription,
-        created_at: row.created_at,
-        updated_at: row.updated_at
-      };
-
-      if (row.classe_id) {
-        eleve.classe = {
-          id: row.classe_id,
-          nom: row.classe_nom,
-          niveau: row.classe_niveau,
-          cycle: row.classe_cycle,
-          section: row.classe_section
-        };
-      }
-
-      return eleve;
-    });
-
+    const eleves = formatEleves(result.rows);
     res.json(eleves);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -222,7 +240,7 @@ exports.createEleve = async (req, res) => {
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error('Erreur lors de la création de l\'élève:', error);
+    logger.error('Erreur lors de la création de l\'élève:', error);
     res.status(400).json({ message: error.message });
   }
 };
@@ -330,6 +348,103 @@ exports.deleteEleve = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+// @desc    Importer des élèves en masse (CSV)
+// @route   POST /api/eleves/batch
+exports.importEleves = async (req, res) => {
+  let { eleves, anneeScolaire } = req.body;
+  if (!Array.isArray(eleves) || eleves.length === 0) {
+    return res.status(400).json({ message: 'Aucun élève à importer' });
+  }
+
+  // Si anneeScolaire non fournie, utiliser l'année active
+  if (!anneeScolaire) {
+    const anneeRes = await query(`SELECT annee FROM annees_scolaires WHERE active = true LIMIT 1`);
+    anneeScolaire = anneeRes.rows[0]?.annee || null;
+  }
+
+  if (!anneeScolaire) {
+    return res.status(400).json({ message: 'Aucune année scolaire active. Veuillez en activer une dans la configuration.' });
+  }
+
+  // Pré-charger toutes les classes pour la résolution par nom
+  const classesResult = await query('SELECT id, nom FROM classes');
+  const classeMap = {};
+  for (const c of classesResult.rows) {
+    classeMap[c.nom.toLowerCase().trim()] = c.id;
+  }
+
+  // Récupérer le dernier matricule de l'année en cours
+  const currentYear = new Date().getFullYear();
+  const lastMatriculeResult = await query(
+    `SELECT matricule FROM eleves WHERE matricule LIKE $1 ORDER BY matricule DESC LIMIT 1`,
+    [`EL${currentYear}%`]
+  );
+  let nextNumber = 1;
+  if (lastMatriculeResult.rows.length > 0) {
+    const last = lastMatriculeResult.rows[0].matricule;
+    nextNumber = parseInt(last.substring(6)) + 1;
+  }
+
+  const imported = [];
+  const errors = [];
+
+  for (let i = 0; i < eleves.length; i++) {
+    const e = eleves[i];
+    try {
+      if (!e.nom || !e.prenom) {
+        errors.push({ ligne: i + 1, message: 'Nom et prénom obligatoires', data: e });
+        continue;
+      }
+
+      const sexe = (e.sexe || '').toUpperCase();
+      if (sexe && !['M', 'F'].includes(sexe)) {
+        errors.push({ ligne: i + 1, message: `Sexe invalide: "${e.sexe}" (attendu M ou F)`, data: e });
+        continue;
+      }
+
+      let classeId = null;
+      if (e.classe) {
+        const key = e.classe.toLowerCase().trim();
+        classeId = classeMap[key] || null;
+        if (!classeId) {
+          errors.push({ ligne: i + 1, message: `Classe introuvable: "${e.classe}"`, data: e });
+          continue;
+        }
+      }
+
+      const matricule = `EL${currentYear}${nextNumber.toString().padStart(3, '0')}`;
+      nextNumber++;
+
+      const result = await query(
+        `INSERT INTO eleves (
+          matricule, nom, prenom, date_naissance, lieu_naissance, sexe,
+          classe_id, tuteur_nom, tuteur_prenom, tuteur_telephone, statut, annee_scolaire, date_inscription
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, matricule, nom, prenom`,
+        [
+          matricule,
+          e.nom.trim(),
+          e.prenom.trim(),
+          e.dateNaissance || e.date_naissance || null,
+          e.lieuNaissance || e.lieu_naissance || null,
+          sexe || null,
+          classeId,
+          e.tuteurNom || e.tuteur_nom || null,
+          e.tuteurPrenom || e.tuteur_prenom || '',
+          e.tuteurTelephone || e.tuteur_telephone || null,
+          'ACTIF',
+          anneeScolaire || null,
+          new Date()
+        ]
+      );
+      imported.push(result.rows[0]);
+    } catch (err) {
+      errors.push({ ligne: i + 1, message: err.message, data: e });
+    }
+  }
+
+  res.status(201).json({ imported: imported.length, errors, eleves: imported });
 };
 
 // @desc    Obtenir les statistiques des élèves

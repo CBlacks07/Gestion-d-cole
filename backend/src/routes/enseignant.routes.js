@@ -10,6 +10,7 @@ const {
 const { protect, authorize } = require('../middleware/auth');
 
 router.use(protect);
+router.use(authorize('admin', 'directeur', 'secretaire'));
 
 router.route('/')
   .get(getEnseignants)

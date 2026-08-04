@@ -16,7 +16,7 @@ exports.protect = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const result = await query(
-      'SELECT id, nom, prenom, email, role, telephone, actif FROM users WHERE id = $1',
+      'SELECT id, nom, prenom, email, role, telephone, actif, enseignant_id, password_changed_at FROM users WHERE id = $1',
       [decoded.id]
     );
 
@@ -24,7 +24,17 @@ exports.protect = async (req, res, next) => {
       return res.status(401).json({ message: 'Utilisateur non trouvé' });
     }
 
-    req.user = result.rows[0];
+    const user = result.rows[0];
+
+    // Invalider les tokens émis avant le dernier changement de mot de passe
+    if (user.password_changed_at) {
+      const changedAt = Math.floor(new Date(user.password_changed_at).getTime() / 1000);
+      if (decoded.iat < changedAt) {
+        return res.status(401).json({ message: 'Session expirée, veuillez vous reconnecter' });
+      }
+    }
+
+    req.user = user;
 
     next();
   } catch (error) {

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import api from '../services/api'
 import { Eleve } from '../types'
-import { Plus, Trash2 } from 'lucide-react'
+import { useToast } from '../contexts/ToastContext'
 
 interface NoteFormMultipleModalProps {
   isOpen: boolean
@@ -18,17 +18,23 @@ interface MatiereNote {
   commentaire: string
 }
 
+const noteMaxFromCoefficient = (coefficient?: number) => {
+  const coef = Number(coefficient)
+  if (!Number.isFinite(coef) || coef <= 0) return 20
+  return coef * 10
+}
+
 export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: NoteFormMultipleModalProps) {
+  const { error: toastError } = useToast()
   const [loading, setLoading] = useState(false)
   const [loadingMatieres, setLoadingMatieres] = useState(false)
   const [eleves, setEleves] = useState<Eleve[]>([])
-  const [anneeActive, setAnneeActive] = useState<any>(null)
+  const [anneeActive, setAnneeActive] = useState<string>('')
   const [formData, setFormData] = useState({
     eleveId: '',
     classeId: '',
     typeEvaluation: 'Devoir',
     periode: '1er Trimestre',
-    noteMax: '20',
     dateEvaluation: new Date().toISOString().split('T')[0]
   })
   const [matieres, setMatieres] = useState<MatiereNote[]>([])
@@ -42,57 +48,72 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
   const loadData = async () => {
     try {
       const [elevesRes, anneeRes] = await Promise.all([
-        api.get('/eleves'),
+        api.get('/eleves', { params: { all: true } }),
         api.get('/annees/active')
       ])
 
-      // Mapper les élèves (backend snake_case -> frontend camelCase)
-      const mappedEleves = elevesRes.data
+      const elevesRaw = Array.isArray(elevesRes.data) ? elevesRes.data : (elevesRes.data?.data ?? [])
+      const mappedEleves = elevesRaw
         .map((data: any) => ({
           id: data.id,
           matricule: data.matricule,
           nom: data.nom,
           prenom: data.prenom,
           statut: data.statut,
-          classe: data.classe ? {
-            id: data.classe.id,
-            nom: data.classe.nom
-          } : null
+          classe: data.classe
+            ? {
+                id: data.classe.id,
+                nom: data.classe.nom
+              }
+            : null
         }))
-        .filter((e: any) => e.statut === 'ACTIF' || e.statut === 'actif')
+        .filter((e: any) => String(e.statut || '').toUpperCase() === 'ACTIF')
+        .sort((a: any, b: any) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
 
       setEleves(mappedEleves)
-      setAnneeActive(anneeRes.data)
+      setAnneeActive(anneeRes.data?.annee || '')
     } catch (error) {
-      console.error('Erreur lors du chargement des données', error)
+      console.error('Erreur lors du chargement des donnees', error)
     }
   }
 
   const loadMatieresClasse = async (eleveId: string) => {
     try {
       setLoadingMatieres(true)
-      const eleve = eleves.find(e => e.id === eleveId)
-      if (!eleve || !eleve.classe) {
+
+      if (!anneeActive) {
         setMatieres([])
         return
       }
 
-      setFormData(prev => ({ ...prev, classeId: eleve.classe.id }))
+      const eleve = eleves.find((e) => e.id === eleveId)
+      const classeId = eleve?.classe?.id || ''
 
-      // Charger toutes les matières disponibles depuis /matieres
-      const response = await api.get('/matieres')
+      if (!classeId) {
+        setFormData((prev) => ({ ...prev, classeId: '' }))
+        setMatieres([])
+        return
+      }
 
-      const matieresData = response.data.map((m: any) => ({
-        matiere_id: m.id,
-        matiere_nom: m.nom,
-        coefficient: 1, // Coefficient par défaut
-        note: '',
-        commentaire: ''
-      }))
+      setFormData((prev) => ({ ...prev, classeId }))
+
+      const response = await api.get(`/classe-matieres/classe/${classeId}`, {
+        params: { annee_scolaire: anneeActive }
+      })
+
+      const matieresData = response.data
+        .map((row: any) => ({
+          matiere_id: row.matiere_id,
+          matiere_nom: row.nom,
+          coefficient: row.coefficient || 1,
+          note: '',
+          commentaire: ''
+        }))
+        .sort((a: MatiereNote, b: MatiereNote) => a.matiere_nom.localeCompare(b.matiere_nom, 'fr'))
 
       setMatieres(matieresData)
     } catch (error) {
-      console.error('Erreur lors du chargement des matières', error)
+      console.error('Erreur lors du chargement des matieres', error)
       setMatieres([])
     } finally {
       setLoadingMatieres(false)
@@ -100,12 +121,14 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
   }
 
   const handleEleveChange = (eleveId: string) => {
-    setFormData(prev => ({ ...prev, eleveId }))
+    setFormData((prev) => ({ ...prev, eleveId, classeId: '' }))
+
     if (eleveId) {
       loadMatieresClasse(eleveId)
-    } else {
-      setMatieres([])
+      return
     }
+
+    setMatieres([])
   }
 
   const handleNoteChange = (index: number, field: string, value: string) => {
@@ -114,37 +137,27 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
     setMatieres(newMatieres)
   }
 
-  const addMatiere = () => {
-    setMatieres([...matieres, {
-      matiere_id: '',
-      matiere_nom: '',
-      coefficient: 1,
-      note: '',
-      commentaire: ''
-    }])
-  }
-
-  const removeMatiere = (index: number) => {
-    const newMatieres = matieres.filter((_, i) => i !== index)
-    setMatieres(newMatieres)
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
     try {
-      // Filtrer uniquement les notes saisies (non vides)
-      const notesToSave = matieres.filter(m => m.note && m.note.trim() !== '')
-
-      if (notesToSave.length === 0) {
-        alert('Veuillez saisir au moins une note')
+      if (!anneeActive) {
+        toastError('Aucune année scolaire active')
         setLoading(false)
         return
       }
 
-      // Créer les notes en parallèle
-      const promises = notesToSave.map(matiere => {
+      const notesToSave = matieres.filter((m) => m.note && m.note.trim() !== '')
+
+      if (notesToSave.length === 0) {
+        toastError('Veuillez saisir au moins une note')
+        setLoading(false)
+        return
+      }
+
+      const promises = notesToSave.map((matiere) => {
+        const noteMax = noteMaxFromCoefficient(matiere.coefficient)
         const data = {
           eleveId: formData.eleveId,
           matiereId: matiere.matiere_id,
@@ -152,12 +165,13 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
           typeEvaluation: formData.typeEvaluation,
           periode: formData.periode,
           note: parseFloat(matiere.note),
-          noteMax: parseFloat(formData.noteMax),
+          noteMax,
           coefficient: matiere.coefficient,
           commentaire: matiere.commentaire || undefined,
           dateEvaluation: formData.dateEvaluation,
-          anneeScolaire: anneeActive?.annee
+          anneeScolaire: anneeActive
         }
+
         return api.post('/notes', data)
       })
 
@@ -167,8 +181,8 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
       onClose()
       resetForm()
     } catch (error: any) {
-      console.error('Erreur lors de la création des notes', error)
-      alert(error.response?.data?.message || 'Erreur lors de la création des notes')
+      console.error('Erreur lors de la creation des notes', error)
+      toastError(error.response?.data?.message || 'Erreur lors de la création des notes')
     } finally {
       setLoading(false)
     }
@@ -180,7 +194,6 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
       classeId: '',
       typeEvaluation: 'Devoir',
       periode: '1er Trimestre',
-      noteMax: '20',
       dateEvaluation: new Date().toISOString().split('T')[0]
     })
     setMatieres([])
@@ -189,20 +202,12 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Saisir les notes d'un élève" size="xl">
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Informations générales */}
         <div>
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Informations générales</h3>
+          <h3 className="text-lg font-display font-semibold mb-4 text-gray-900">Informations générales</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Année scolaire
-              </label>
-              <input
-                type="text"
-                className="input bg-gray-100"
-                value={anneeActive?.annee || 'Chargement...'}
-                disabled
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Année scolaire</label>
+              <input type="text" className="input bg-gray-100" value={anneeActive || 'Chargement...'} disabled />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -248,22 +253,11 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
                 onChange={(e) => setFormData({ ...formData, periode: e.target.value })}
               >
                 <option value="1er Trimestre">1er Trimestre</option>
-                <option value="2ème Trimestre">2ème Trimestre</option>
-                <option value="3ème Trimestre">3ème Trimestre</option>
+                <option value="2eme Trimestre">2eme Trimestre</option>
+                <option value="3eme Trimestre">3eme Trimestre</option>
+                <option value="1er Semestre">1er Semestre</option>
+                <option value="2eme Semestre">2eme Semestre</option>
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Note maximale <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                required
-                min="1"
-                className="input"
-                value={formData.noteMax}
-                onChange={(e) => setFormData({ ...formData, noteMax: e.target.value })}
-              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -280,22 +274,11 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
           </div>
         </div>
 
-        {/* Matières et notes */}
         {formData.eleveId && (
           <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Notes par matière {loadingMatieres && <span className="text-sm text-gray-500">(Chargement...)</span>}
-              </h3>
-              <button
-                type="button"
-                onClick={addMatiere}
-                className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-1"
-              >
-                <Plus className="h-4 w-4" />
-                Ajouter une matière
-              </button>
-            </div>
+            <h3 className="text-lg font-display font-semibold text-gray-900 mb-4">
+              Notes par matière {loadingMatieres && <span className="text-sm text-gray-500">(Chargement...)</span>}
+            </h3>
 
             {matieres.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
@@ -303,61 +286,47 @@ export default function NoteFormMultipleModal({ isOpen, onClose, onSuccess }: No
               </div>
             ) : (
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {matieres.map((matiere, index) => (
-                  <div key={index} className="p-4 border border-gray-200 rounded-lg">
-                    <div className="flex justify-between items-start mb-3">
-                      <h4 className="font-medium text-gray-900">
-                        {matiere.matiere_nom || 'Nouvelle matière'}
-                        <span className="ml-2 text-sm text-gray-500">
-                          (Coef. {matiere.coefficient})
-                        </span>
+                {matieres.map((matiere, index) => {
+                  const noteMax = noteMaxFromCoefficient(matiere.coefficient)
+                  return (
+                    <div key={matiere.matiere_id} className="p-4 border border-gray-200 rounded-lg">
+                      <h4 className="font-medium text-gray-900 mb-3">
+                        {matiere.matiere_nom}
+                        <span className="ml-2 text-sm text-gray-500">(Coef. {matiere.coefficient}, /{noteMax})</span>
                       </h4>
-                      <button
-                        type="button"
-                        onClick={() => removeMatiere(index)}
-                        className="text-red-600 hover:text-red-700 p-1"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-4 gap-3">
-                      <div className="col-span-1">
-                        <label className="block text-xs text-gray-600 mb-1">
-                          Note
-                        </label>
-                        <input
-                          type="number"
-                          step="0.25"
-                          min="0"
-                          max={formData.noteMax}
-                          className="input"
-                          placeholder="15"
-                          value={matiere.note}
-                          onChange={(e) => handleNoteChange(index, 'note', e.target.value)}
-                        />
-                      </div>
-                      <div className="col-span-3">
-                        <label className="block text-xs text-gray-600 mb-1">
-                          Commentaire
-                        </label>
-                        <input
-                          type="text"
-                          className="input"
-                          placeholder="Très bien, continue ainsi..."
-                          value={matiere.commentaire}
-                          onChange={(e) => handleNoteChange(index, 'commentaire', e.target.value)}
-                        />
+                      <div className="grid grid-cols-4 gap-3">
+                        <div className="col-span-1">
+                          <label className="block text-xs text-gray-600 mb-1">Note /{noteMax}</label>
+                          <input
+                            type="number"
+                            step="0.25"
+                            min="0"
+                            max={noteMax}
+                            className="input"
+                            placeholder="15"
+                            value={matiere.note}
+                            onChange={(e) => handleNoteChange(index, 'note', e.target.value)}
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <label className="block text-xs text-gray-600 mb-1">Commentaire</label>
+                          <input
+                            type="text"
+                            className="input"
+                            placeholder="Optionnel"
+                            value={matiere.commentaire}
+                            onChange={(e) => handleNoteChange(index, 'commentaire', e.target.value)}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
         )}
 
-        {/* Actions */}
         <div className="flex justify-end gap-3 pt-4 border-t">
           <button
             type="button"

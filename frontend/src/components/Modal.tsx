@@ -45,10 +45,10 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
         />
 
         {/* Modal */}
-        <div className={`relative bg-white rounded-lg shadow-xl w-full ${sizeClasses[size]} z-50`}>
+        <div className={`relative bg-white dark:bg-forest-800 rounded-2xl shadow-xl w-full ${sizeClasses[size]} z-50`}>
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
+            <h2 className="text-xl font-display font-bold text-gray-900">{title}</h2>
             <button
               onClick={onClose}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"

@@ -1,4 +1,5 @@
 const { query } = require('../lib/db');
+const { logAuditEvent } = require('../lib/audit');
 
 exports.getAbsences = async (req, res) => {
   try {
@@ -44,7 +45,7 @@ exports.getAbsences = async (req, res) => {
 
     if (justifiee !== undefined) {
       sql += ` AND a.justifiee = $${paramIndex}`;
-      params.push(justifiee === 'true');
+      params.push(justifiee === true || justifiee === 'true');
       paramIndex++;
     }
 
@@ -152,8 +153,9 @@ exports.createAbsence = async (req, res) => {
       enregistreParId: req.user.id
     };
 
-    // Convertir l'enum periode si présent
-    if (data.periode) data.periode = data.periode.toUpperCase();
+    if (data.periode) {
+      data.periode = data.periode.toUpperCase().replace(/[\s-]+/g, '_');
+    }
 
     const result = await query(
       `INSERT INTO absences (
@@ -175,6 +177,20 @@ exports.createAbsence = async (req, res) => {
       ]
     );
 
+    await logAuditEvent({
+      req,
+      userId: req.user?.id || null,
+      action: 'ABSENCE_CREATE',
+      entity: 'ABSENCE',
+      entityId: result.rows[0].id,
+      status: 'SUCCESS',
+      details: {
+        eleveId: result.rows[0].eleve_id,
+        classeId: result.rows[0].classe_id,
+        anneeScolaire: result.rows[0].annee_scolaire
+      }
+    });
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -185,8 +201,9 @@ exports.updateAbsence = async (req, res) => {
   try {
     const data = { ...req.body };
 
-    // Convertir l'enum periode si présent
-    if (data.periode) data.periode = data.periode.toUpperCase();
+    if (data.periode) {
+      data.periode = data.periode.toUpperCase().replace(/[\s-]+/g, '_');
+    }
 
     // Construire la requête dynamiquement
     const fields = [];
@@ -231,6 +248,18 @@ exports.updateAbsence = async (req, res) => {
       return res.status(404).json({ message: 'Absence non trouvée' });
     }
 
+    await logAuditEvent({
+      req,
+      userId: req.user?.id || null,
+      action: 'ABSENCE_UPDATE',
+      entity: 'ABSENCE',
+      entityId: result.rows[0].id,
+      status: 'SUCCESS',
+      details: {
+        fields: Object.keys(data)
+      }
+    });
+
     res.json(result.rows[0]);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -240,7 +269,7 @@ exports.updateAbsence = async (req, res) => {
 exports.deleteAbsence = async (req, res) => {
   try {
     const result = await query(
-      'DELETE FROM absences WHERE id = $1 RETURNING id',
+      'DELETE FROM absences WHERE id = $1 RETURNING id, eleve_id, classe_id, annee_scolaire',
       [req.params.id]
     );
 
@@ -248,7 +277,21 @@ exports.deleteAbsence = async (req, res) => {
       return res.status(404).json({ message: 'Absence non trouvée' });
     }
 
-    res.json({ message: 'Absence supprimée avec succès' });
+    await logAuditEvent({
+      req,
+      userId: req.user?.id || null,
+      action: 'ABSENCE_DELETE',
+      entity: 'ABSENCE',
+      entityId: result.rows[0].id,
+      status: 'SUCCESS',
+      details: {
+        eleveId: result.rows[0].eleve_id,
+        classeId: result.rows[0].classe_id,
+        anneeScolaire: result.rows[0].annee_scolaire
+      }
+    });
+
+    res.json({ message: 'Absence supprimee avec succes' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

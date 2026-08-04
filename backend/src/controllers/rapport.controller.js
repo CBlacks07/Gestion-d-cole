@@ -1,62 +1,339 @@
 const { query } = require('../lib/db');
 
+const normalizeValue = (value) => {
+  if (value === undefined || value === null) return '';
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+};
+
+const PERIODE_ALIASES = {
+  '1ER TRIMESTRE': 'PREMIER_TRIMESTRE',
+  '1ERE TRIMESTRE': 'PREMIER_TRIMESTRE',
+  'PREMIER TRIMESTRE': 'PREMIER_TRIMESTRE',
+  'TRIMESTRE 1': 'PREMIER_TRIMESTRE',
+  T1: 'PREMIER_TRIMESTRE',
+  '2EME TRIMESTRE': 'DEUXIEME_TRIMESTRE',
+  '2E TRIMESTRE': 'DEUXIEME_TRIMESTRE',
+  'DEUXIEME TRIMESTRE': 'DEUXIEME_TRIMESTRE',
+  'TRIMESTRE 2': 'DEUXIEME_TRIMESTRE',
+  T2: 'DEUXIEME_TRIMESTRE',
+  '3EME TRIMESTRE': 'TROISIEME_TRIMESTRE',
+  '3E TRIMESTRE': 'TROISIEME_TRIMESTRE',
+  'TROISIEME TRIMESTRE': 'TROISIEME_TRIMESTRE',
+  'TRIMESTRE 3': 'TROISIEME_TRIMESTRE',
+  T3: 'TROISIEME_TRIMESTRE',
+  '1ER SEMESTRE': 'PREMIER_SEMESTRE',
+  '1ERE SEMESTRE': 'PREMIER_SEMESTRE',
+  'PREMIER SEMESTRE': 'PREMIER_SEMESTRE',
+  'SEMESTRE 1': 'PREMIER_SEMESTRE',
+  S1: 'PREMIER_SEMESTRE',
+  '2EME SEMESTRE': 'DEUXIEME_SEMESTRE',
+  '2E SEMESTRE': 'DEUXIEME_SEMESTRE',
+  'DEUXIEME SEMESTRE': 'DEUXIEME_SEMESTRE',
+  'SEMESTRE 2': 'DEUXIEME_SEMESTRE',
+  S2: 'DEUXIEME_SEMESTRE'
+};
+
+const normalizePeriodeKey = (value) =>
+  normalizeValue(value)
+    .replace(/[+/_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const convertPeriode = (periode) => {
+  if (periode === undefined || periode === null) return null;
+  const normalized = normalizePeriodeKey(periode);
+  if (!normalized) return null;
+  return PERIODE_ALIASES[normalized] || null;
+};
+
 // Tableau de bord général
 exports.getDashboard = async (req, res) => {
   try {
     const { anneeScolaire } = req.query;
+    const role = normalizeValue(req.user?.role);
 
-    let whereEleve = "WHERE statut = 'ACTIF'";
-    let whereClasse = 'WHERE 1=1';
-    let wherePaiements = "WHERE statut = 'VALIDE'";
-    const params = [];
+    if (role === 'ENSEIGNANT') {
+      const enseignantId = req.user?.enseignant_id || null;
+      if (!enseignantId) {
+        return res.status(403).json({ message: 'Compte enseignant non lie a un profil enseignant' });
+      }
 
-    if (anneeScolaire) {
-      whereEleve += ' AND annee_scolaire = $1';
-      whereClasse += ' AND annee_scolaire = $1';
-      wherePaiements += ' AND annee_scolaire = $1';
-      params.push(anneeScolaire);
+      const params = anneeScolaire ? [enseignantId, anneeScolaire] : [enseignantId];
+      const classesCte = `
+        WITH my_classes AS (
+          SELECT DISTINCT c.id, c.cycle
+          FROM classes c
+          LEFT JOIN classe_matieres cm
+            ON cm.classe_id = c.id
+           AND cm.enseignant_id = $1
+           ${anneeScolaire ? 'AND cm.annee_scolaire = $2' : ''}
+          WHERE (c.enseignant_principal_id = $1 OR cm.enseignant_id = $1)
+            ${anneeScolaire ? 'AND c.annee_scolaire = $2' : ''}
+        )
+      `;
+
+      const [
+        totalElevesResult,
+        totalClassesResult,
+        elevesParCycleResult,
+        absencesMoisResult,
+        notesSaisiesMoisResult,
+        matieresAttribueesResult
+      ] = await Promise.all([
+        query(
+          `${classesCte}
+           SELECT COUNT(*) as count
+           FROM eleves e
+           WHERE e.statut = 'ACTIF'
+             AND e.classe_id IN (SELECT id FROM my_classes)
+             ${anneeScolaire ? 'AND e.annee_scolaire = $2' : ''}`,
+          params
+        ),
+        query(
+          `${classesCte}
+           SELECT COUNT(*) as count
+           FROM my_classes`,
+          params
+        ),
+        query(
+          `${classesCte}
+           SELECT mc.cycle, COUNT(e.id) as count
+           FROM my_classes mc
+           LEFT JOIN eleves e
+             ON e.classe_id = mc.id
+            AND e.statut = 'ACTIF'
+            ${anneeScolaire ? 'AND e.annee_scolaire = $2' : ''}
+           GROUP BY mc.cycle
+           ORDER BY mc.cycle`,
+          params
+        ),
+        query(
+          `${classesCte}
+           SELECT COUNT(*) as count
+           FROM absences a
+           WHERE a.date >= date_trunc('month', CURRENT_DATE)
+             AND a.classe_id IN (SELECT id FROM my_classes)
+             ${anneeScolaire ? 'AND a.annee_scolaire = $2' : ''}`,
+          params
+        ),
+        query(
+          `SELECT COUNT(*) as count
+           FROM notes n
+           WHERE n.enseignant_id = $1
+             AND n.date_evaluation >= date_trunc('month', CURRENT_DATE)
+             ${anneeScolaire ? 'AND n.annee_scolaire = $2' : ''}`,
+          params
+        ),
+        query(
+          `SELECT COUNT(DISTINCT x.matiere_id) as count
+           FROM (
+             SELECT cm.matiere_id
+             FROM classe_matieres cm
+             WHERE cm.enseignant_id = $1
+               ${anneeScolaire ? 'AND cm.annee_scolaire = $2' : ''}
+             UNION
+             SELECT em.matiere_id
+             FROM enseignant_matieres em
+             WHERE em.enseignant_id = $1
+           ) x`,
+          params
+        )
+      ]);
+
+      return res.json({
+        totalEleves: parseInt(totalElevesResult.rows[0].count),
+        totalClasses: parseInt(totalClassesResult.rows[0].count),
+        totalEnseignants: 0,
+        elevesParCycle: elevesParCycleResult.rows.map(row => ({ _id: row.cycle, count: parseInt(row.count) })),
+        recettesTotal: 0,
+        devise: 'XOF',
+        alertes: {
+          paiementsEnAttente: {
+            count: 0,
+            total: 0
+          },
+          absencesMois: parseInt(absencesMoisResult.rows[0].count),
+          elevesAbsentsSouvent: []
+        },
+        activiteRecente: {
+          derniersEleves: [],
+          derniersP: []
+        },
+        meta: {
+          isTeacherView: true,
+          notesSaisiesMois: parseInt(notesSaisiesMoisResult.rows[0].count),
+          matieresAttribuees: parseInt(matieresAttribueesResult.rows[0].count)
+        }
+      });
     }
 
-    // Total d'élèves actifs
-    const totalElevesResult = await query(
-      `SELECT COUNT(*) as count FROM eleves ${whereEleve}`,
-      anneeScolaire ? [anneeScolaire] : []
-    );
+    const p = anneeScolaire ? [anneeScolaire] : [];
+    const anneeFilter = anneeScolaire ? ' AND annee_scolaire = $1' : '';
+    const anneeFilterC = anneeScolaire ? ' AND c.annee_scolaire = $1' : '';
 
-    // Total de classes
-    const totalClassesResult = await query(
-      `SELECT COUNT(*) as count FROM classes ${whereClasse}`,
-      anneeScolaire ? [anneeScolaire] : []
-    );
+    const anneeFilterP = anneeScolaire ? ' AND p.annee_scolaire = $1' : '';
 
-    // Élèves par cycle
-    const elevesParCycleResult = await query(
-      `SELECT c.cycle, COUNT(e.id) as count
-       FROM eleves e
-       JOIN classes c ON e.classe_id = c.id
-       WHERE e.statut = 'ACTIF'
-       ${anneeScolaire ? 'AND e.annee_scolaire = $1' : ''}
-       GROUP BY c.cycle`,
-      anneeScolaire ? [anneeScolaire] : []
-    );
+    const [
+      totalElevesResult,
+      totalClassesResult,
+      elevesParCycleResult,
+      recettesResult,
+      paiementsAttenteResult,
+      totalEnseignantsResult,
+      absencesMoisResult,
+      elevesAbsentsResult,
+      derniersElevesResult,
+      paiementsRecentResult,
+      totalAttenduResult,
+      impayesResult,
+      recettesScolariteResult
+    ] = await Promise.all([
+      // Élèves actifs
+      query(`SELECT COUNT(*) as count FROM eleves WHERE statut = 'ACTIF'${anneeFilter}`, p),
+      // Classes
+      query(`SELECT COUNT(*) as count FROM classes WHERE 1=1${anneeFilter}`, p),
+      // Élèves par cycle
+      query(
+        `SELECT c.cycle, COUNT(e.id) as count
+         FROM eleves e
+         JOIN classes c ON e.classe_id = c.id
+         WHERE e.statut = 'ACTIF'${anneeFilterC}
+         GROUP BY c.cycle`,
+        p
+      ),
+      // Recettes validées (tous types)
+      query(`SELECT COALESCE(SUM(montant),0) as total FROM paiements WHERE statut = 'VALIDE'${anneeFilter}`, p),
+      // Paiements en attente
+      query(
+        `SELECT COUNT(*) as count, COALESCE(SUM(montant),0) as total
+         FROM paiements WHERE statut = 'EN_ATTENTE'${anneeFilter}`,
+        p
+      ),
+      // Enseignants actifs
+      query(`SELECT COUNT(*) as count FROM enseignants WHERE statut = 'ACTIF'`, []),
+      // Absences ce mois
+      query(
+        `SELECT COUNT(*) as count FROM absences
+         WHERE date >= date_trunc('month', CURRENT_DATE)${anneeFilter}`,
+        p
+      ),
+      // Élèves avec 3+ absences non justifiées ce mois
+      query(
+        `SELECT e.id, e.nom, e.prenom, COUNT(a.id) as nb_absences
+         FROM absences a
+         JOIN eleves e ON a.eleve_id = e.id
+         WHERE a.justifiee = false
+           AND a.date >= date_trunc('month', CURRENT_DATE)${anneeFilter.replace('annee_scolaire', 'a.annee_scolaire')}
+         GROUP BY e.id, e.nom, e.prenom
+         HAVING COUNT(a.id) >= 3
+         ORDER BY nb_absences DESC
+         LIMIT 5`,
+        p
+      ),
+      // Derniers élèves inscrits
+      query(
+        `SELECT id, nom, prenom, matricule, created_at
+         FROM eleves
+         WHERE statut = 'ACTIF'${anneeFilter}
+         ORDER BY created_at DESC
+         LIMIT 5`,
+        p
+      ),
+      // Paiements récents
+      query(
+        `SELECT p.id, p.montant, p.type_paiement, p.date_paiement, p.statut,
+                e.nom as eleve_nom, e.prenom as eleve_prenom
+         FROM paiements p
+         JOIN eleves e ON p.eleve_id = e.id
+         WHERE 1=1${anneeFilterP}
+         ORDER BY p.date_paiement DESC, p.created_at DESC
+         LIMIT 5`,
+        p
+      ),
+      // Total scolarité attendu (montant_scolarite * nb élèves actifs avec classe)
+      query(
+        `SELECT COALESCE(SUM(c.montant_scolarite), 0) as total
+         FROM eleves e
+         JOIN classes c ON e.classe_id = c.id
+         WHERE e.statut = 'ACTIF'${anneeFilterC}
+           AND c.montant_scolarite > 0`,
+        p
+      ),
+      // Élèves impayés (ont payé moins que montant_scolarite)
+      query(
+        `SELECT
+           COUNT(DISTINCT e.id) as count,
+           COALESCE(SUM(c.montant_scolarite - COALESCE(pv.total_paye, 0)), 0) as reste
+         FROM eleves e
+         JOIN classes c ON e.classe_id = c.id
+         LEFT JOIN (
+           SELECT eleve_id, SUM(montant) as total_paye
+           FROM paiements
+           WHERE statut = 'VALIDE' AND type_paiement = 'SCOLARITE'${anneeFilter}
+           GROUP BY eleve_id
+         ) pv ON pv.eleve_id = e.id
+         WHERE e.statut = 'ACTIF'${anneeFilterC}
+           AND c.montant_scolarite > 0
+           AND COALESCE(pv.total_paye, 0) < c.montant_scolarite`,
+        p
+      ),
+      // Recettes scolarité uniquement (validées)
+      query(
+        `SELECT COALESCE(SUM(montant), 0) as total
+         FROM paiements
+         WHERE statut = 'VALIDE' AND type_paiement = 'SCOLARITE'${anneeFilter}`,
+        p
+      )
+    ]);
 
-    const elevesParCycle = elevesParCycleResult.rows.map(row => ({
-      _id: row.cycle,
-      count: parseInt(row.count)
-    }));
-
-    // Recettes totales
-    const recettesResult = await query(
-      `SELECT SUM(montant) as total FROM paiements ${wherePaiements}`,
-      anneeScolaire ? [anneeScolaire] : []
-    );
+    const totalAttendu = parseFloat(totalAttenduResult.rows[0].total || 0);
+    const elevesImpayes = parseInt(impayesResult.rows[0].count || 0);
+    const resteRecouvrer = parseFloat(impayesResult.rows[0].reste || 0);
+    const recettesScolarite = parseFloat(recettesScolariteResult.rows[0].total || 0);
+    const tauxRecouvrement = totalAttendu > 0 ? Math.round((recettesScolarite / totalAttendu) * 100) : 0;
 
     res.json({
       totalEleves: parseInt(totalElevesResult.rows[0].count),
       totalClasses: parseInt(totalClassesResult.rows[0].count),
-      elevesParCycle,
-      recettesTotal: parseFloat(recettesResult.rows[0].total || 0),
-      devise: 'XOF'
+      totalEnseignants: parseInt(totalEnseignantsResult.rows[0].count),
+      elevesParCycle: elevesParCycleResult.rows.map(row => ({ _id: row.cycle, count: parseInt(row.count) })),
+      recettesTotal: parseFloat(recettesResult.rows[0].total),
+      devise: 'XOF',
+      paiements: {
+        totalAttendu,
+        recettesScolarite,
+        resteRecouvrer,
+        elevesImpayes,
+        tauxRecouvrement
+      },
+      alertes: {
+        paiementsEnAttente: {
+          count: parseInt(paiementsAttenteResult.rows[0].count),
+          total: parseFloat(paiementsAttenteResult.rows[0].total)
+        },
+        absencesMois: parseInt(absencesMoisResult.rows[0].count),
+        elevesAbsentsSouvent: elevesAbsentsResult.rows.map(r => ({
+          id: r.id,
+          nom: r.nom,
+          prenom: r.prenom,
+          nbAbsences: parseInt(r.nb_absences)
+        }))
+      },
+      activiteRecente: {
+        derniersEleves: derniersElevesResult.rows,
+        derniersP: paiementsRecentResult.rows.map(r => ({
+          id: r.id,
+          montant: parseFloat(r.montant),
+          typePaiement: r.type_paiement,
+          datePaiement: r.date_paiement,
+          statut: r.statut,
+          elevenom: `${r.eleve_prenom} ${r.eleve_nom}`
+        }))
+      }
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -68,6 +345,33 @@ exports.getRapportClasse = async (req, res) => {
   try {
     const { classeId } = req.params;
     const { periode, anneeScolaire } = req.query;
+    const role = normalizeValue(req.user?.role);
+    const enseignantId = req.user?.enseignant_id || null;
+
+    if (role === 'ENSEIGNANT') {
+      if (!enseignantId) {
+        return res.status(403).json({ message: 'Compte enseignant non lie a un profil enseignant' });
+      }
+      const accessResult = await query(
+        `SELECT
+           EXISTS (
+             SELECT 1
+             FROM classes c
+             WHERE c.id = $1
+               AND c.enseignant_principal_id = $2
+           ) AS is_principal,
+           EXISTS (
+             SELECT 1
+             FROM classe_matieres cm
+             WHERE cm.classe_id = $1
+               AND cm.enseignant_id = $2
+           ) AS has_subject`,
+        [classeId, enseignantId]
+      );
+      if (!accessResult.rows[0]?.is_principal && !accessResult.rows[0]?.has_subject) {
+        return res.status(403).json({ message: 'Acces refuse a ce rapport de classe' });
+      }
+    }
 
     // Récupérer la classe avec l'enseignant principal
     const classeResult = await query(
@@ -126,8 +430,12 @@ exports.getRapportClasse = async (req, res) => {
     let paramIndex = 3;
 
     if (periode) {
+      const periodeCode = convertPeriode(periode);
+      if (!periodeCode) {
+        return res.status(400).json({ message: 'Periode invalide' });
+      }
       notesQuery += ` AND n.periode = $${paramIndex}`;
-      notesParams.push(periode.toUpperCase());
+      notesParams.push(periodeCode);
       paramIndex++;
     }
 
@@ -276,6 +584,89 @@ exports.getRapportFinancier = async (req, res) => {
       parType,
       parModePaiement,
       paiements
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Rapport de notes (moyennes par classe)
+exports.getRapportNotes = async (req, res) => {
+  try {
+    const { anneeScolaire, periode } = req.query;
+
+    const params = [];
+    let paramIndex = 1;
+    const classeWhere = [];
+    const noteWhere = [];
+
+    if (anneeScolaire) {
+      classeWhere.push(`c.annee_scolaire = $${paramIndex}`);
+      noteWhere.push(`n.annee_scolaire = $${paramIndex}`);
+      params.push(anneeScolaire);
+      paramIndex++;
+    }
+
+    if (periode) {
+      noteWhere.push(`n.periode = $${paramIndex}`);
+      params.push(periode);
+      paramIndex++;
+    }
+
+    const whereClause = classeWhere.length ? `WHERE ${classeWhere.join(' AND ')}` : '';
+    const noteJoin = noteWhere.length ? `AND ${noteWhere.join(' AND ')}` : '';
+
+    const sql = `
+      SELECT
+        c.id,
+        c.nom,
+        c.cycle,
+        c.niveau,
+        c.annee_scolaire,
+        COUNT(DISTINCT CASE WHEN e.statut = 'ACTIF' THEN e.id END) as effectif,
+        COUNT(n.id) as nombre_notes,
+        CASE
+          WHEN SUM(n.coefficient::numeric) > 0
+          THEN ROUND(
+            SUM((n.note::numeric / NULLIF(n.note_max::numeric, 0)) * 20 * n.coefficient::numeric) /
+            NULLIF(SUM(n.coefficient::numeric), 0),
+            2
+          )
+          ELSE NULL
+        END as moyenne_classe
+      FROM classes c
+      LEFT JOIN eleves e ON e.classe_id = c.id
+      LEFT JOIN notes n ON n.classe_id = c.id ${noteJoin}
+      ${whereClause}
+      GROUP BY c.id, c.nom, c.cycle, c.niveau, c.annee_scolaire
+      ORDER BY c.cycle, c.nom
+    `;
+
+    const result = await query(sql, params);
+
+    const classes = result.rows.map(row => ({
+      id: row.id,
+      nom: row.nom,
+      cycle: row.cycle,
+      niveau: row.niveau,
+      anneeScolaire: row.annee_scolaire,
+      effectif: parseInt(row.effectif || 0),
+      nombreNotes: parseInt(row.nombre_notes || 0),
+      moyenneClasse: row.moyenne_classe !== null ? parseFloat(row.moyenne_classe) : null
+    }));
+
+    const classesAvecNotes = classes.filter(c => c.moyenneClasse !== null);
+    const moyenneGenerale = classesAvecNotes.length > 0
+      ? parseFloat((classesAvecNotes.reduce((sum, c) => sum + c.moyenneClasse, 0) / classesAvecNotes.length).toFixed(2))
+      : null;
+
+    res.json({
+      anneeScolaire: anneeScolaire || null,
+      periode: periode || null,
+      nombreClasses: classes.length,
+      classesAvecNotes: classesAvecNotes.length,
+      moyenneGenerale,
+      classes
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

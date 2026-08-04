@@ -1,0 +1,86 @@
+services:
+
+  # ── Base de données PostgreSQL ────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecole-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${DB_NAME}
+      POSTGRES_USER:     ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./backend/database/migration_classe_matieres.sql:/docker-entrypoint-initdb.d/02-migration_classe_matieres.sql:ro
+      - ./backend/database/migration_data_reliability.sql:/docker-entrypoint-initdb.d/03-migration_data_reliability.sql:ro
+      - ./backend/database/migration_enseignant_user_link.sql:/docker-entrypoint-initdb.d/04-migration_enseignant_user_link.sql:ro
+      - ./backend/database/migration_frais_scolarite.sql:/docker-entrypoint-initdb.d/05-migration_frais_scolarite.sql:ro
+      - ./backend/database/migration_periodes_semestres_bulletin.sql:/docker-entrypoint-initdb.d/06-migration_periodes_semestres_bulletin.sql:ro
+      - ./backend/database/migration_refresh_tokens.sql:/docker-entrypoint-initdb.d/07-migration_refresh_tokens.sql:ro
+      - ./backend/database/migration_security_hardening.sql:/docker-entrypoint-initdb.d/08-migration_security_hardening.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecole-net
+
+  # ── Backend Node.js / Express ─────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ecole-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV:    production
+      PORT:        5001
+      DB_HOST:     postgres
+      DB_PORT:     5432
+      DB_NAME:     ${DB_NAME}
+      DB_USER:     ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET:  ${JWT_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
+      API_RATE_LIMIT_WINDOW_MS: ${API_RATE_LIMIT_WINDOW_MS:-900000}
+      API_RATE_LIMIT_MAX:       ${API_RATE_LIMIT_MAX:-500}
+      LOGIN_RATE_LIMIT_MAX:     ${LOGIN_RATE_LIMIT_MAX:-20}
+      LOGIN_MAX_FAILED_ATTEMPTS: ${LOGIN_MAX_FAILED_ATTEMPTS:-10}
+      LOGIN_LOCK_DURATION_MINUTES: ${LOGIN_LOCK_DURATION_MINUTES:-15}
+      BACKUPS_DIR: /backups
+    volumes:
+      - backups_data:/backups
+    networks:
+      - ecole-net
+
+  # ── Frontend React + Nginx ────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ecole-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${APP_PORT:-80}:80"
+    networks:
+      - ecole-net
+
+# ── Volumes persistants ───────────────────────────────────
+volumes:
+  postgres_data:
+    name: ecole-postgres-data
+  backups_data:
+    name: ecole-backups
+
+# ── Réseau interne ────────────────────────────────────────
+networks:
+  ecole-net:
+    name: ecole-network

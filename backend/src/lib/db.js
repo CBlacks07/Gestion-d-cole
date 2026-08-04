@@ -1,7 +1,19 @@
 const { Pool } = require('pg');
+require('dotenv').config();
+const logger = require('./logger');
 
 // Configuration de la connexion PostgreSQL
 // Utilise soit DATABASE_URL soit les variables individuelles
+if (!process.env.DATABASE_URL) {
+  const requiredVars = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'];
+  const missingVars = requiredVars.filter((name) => !process.env[name]);
+  if (missingVars.length > 0) {
+    throw new Error(
+      `Variables d'environnement PostgreSQL manquantes: ${missingVars.join(', ')}`
+    );
+  }
+}
+
 const poolConfig = process.env.DATABASE_URL
   ? { connectionString: process.env.DATABASE_URL }
   : {
@@ -9,7 +21,7 @@ const poolConfig = process.env.DATABASE_URL
       port: parseInt(process.env.DB_PORT || '5432'),
       database: process.env.DB_NAME || 'Ecole',
       user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'Admin123',
+      password: process.env.DB_PASSWORD,
     };
 
 const pool = new Pool({
@@ -22,7 +34,7 @@ const pool = new Pool({
 
 // Gestion des erreurs de connexion
 pool.on('error', (err) => {
-  console.error('Erreur inattendue sur le client PostgreSQL', err);
+  logger.error('Erreur inattendue sur le client PostgreSQL', { message: err.message });
   process.exit(-1);
 });
 
@@ -34,12 +46,12 @@ const query = async (text, params) => {
     const duration = Date.now() - start;
 
     if (process.env.NODE_ENV === 'development') {
-      console.log('Requête exécutée', { text, duration, rows: res.rowCount });
+      logger.debug('Requête exécutée', { text, duration, rows: res.rowCount });
     }
 
     return res;
   } catch (error) {
-    console.error('Erreur lors de la requete:', error);
+    logger.error('Erreur lors de la requete:', { message: error.message, code: error.code });
     throw error;
   }
 };
@@ -52,7 +64,7 @@ const getClient = async () => {
 
   // Timeout pour les transactions
   const timeout = setTimeout(() => {
-    console.error('Un client n\'a pas été libéré dans les 5 secondes!');
+    logger.warn('Un client PostgreSQL n\'a pas été libéré dans les 5 secondes');
   }, 5000);
 
   // Wrapper pour libérer automatiquement le client
@@ -69,10 +81,10 @@ const getClient = async () => {
 const testConnection = async () => {
   try {
     const result = await query('SELECT NOW()');
-    console.log('✅ Connexion PostgreSQL réussie:', result.rows[0].now);
+    logger.info('Connexion PostgreSQL réussie', { time: result.rows[0].now });
     return true;
   } catch (error) {
-    console.error('❌ Erreur de connexion PostgreSQL:', error.message);
+    logger.error('Erreur de connexion PostgreSQL', { message: error.message });
     return false;
   }
 };
@@ -80,7 +92,7 @@ const testConnection = async () => {
 // Fermer proprement le pool
 const closePool = async () => {
   await pool.end();
-  console.log('Pool PostgreSQL fermé');
+  logger.info('Pool PostgreSQL fermé');
 };
 
 module.exports = {

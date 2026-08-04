@@ -1,69 +1,71 @@
 const { query } = require('../lib/db');
+const { logAuditEvent } = require('../lib/audit');
+const { parsePagination, paginatedResponse } = require('../lib/pagination');
+const logger = require('../lib/logger');
 
 exports.getEnseignants = async (req, res) => {
   try {
     const { statut, search } = req.query;
+    const { page, limit, offset } = parsePagination(req.query);
 
-    let sql = `
-      SELECT e.*
-      FROM enseignants e
-      WHERE 1=1
-    `;
+    let where = 'WHERE 1=1';
     const params = [];
     let paramIndex = 1;
 
     if (statut) {
-      sql += ` AND e.statut = $${paramIndex}`;
+      where += ` AND e.statut = $${paramIndex}`;
       params.push(statut.toUpperCase());
       paramIndex++;
     }
 
     if (search) {
-      sql += ` AND (e.nom ILIKE $${paramIndex} OR e.prenom ILIKE $${paramIndex} OR e.matricule ILIKE $${paramIndex})`;
+      where += ` AND (e.nom ILIKE $${paramIndex} OR e.prenom ILIKE $${paramIndex} OR e.matricule ILIKE $${paramIndex})`;
       params.push(`%${search}%`);
       paramIndex++;
     }
 
-    sql += ` ORDER BY e.nom ASC, e.prenom ASC`;
+    // Compter le total (avant pagination)
+    const countResult = await query(
+      `SELECT COUNT(*) as total FROM enseignants e ${where}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].total, 10);
 
-    const result = await query(sql, params);
+    // Requête principale avec specialites et classes agrégées (évite le N+1)
+    const sql = `
+      SELECT e.*,
+        COALESCE(
+          json_agg(DISTINCT jsonb_build_object(
+            'id', em.id,
+            'matiere_id', em.matiere_id,
+            'matiere', jsonb_build_object('id', m.id, 'nom', m.nom, 'code', m.code, 'coefficient', m.coefficient)
+          )) FILTER (WHERE em.id IS NOT NULL),
+          '[]'
+        ) AS specialites,
+        COALESCE(
+          json_agg(DISTINCT jsonb_build_object('id', c.id, 'nom', c.nom, 'niveau', c.niveau, 'cycle', c.cycle))
+          FILTER (WHERE c.id IS NOT NULL),
+          '[]'
+        ) AS classes_comme_responsable
+      FROM enseignants e
+      LEFT JOIN enseignant_matieres em ON em.enseignant_id = e.id
+      LEFT JOIN matieres m ON em.matiere_id = m.id
+      LEFT JOIN classes c ON c.enseignant_principal_id = e.id
+      ${where}
+      GROUP BY e.id
+      ORDER BY e.nom ASC, e.prenom ASC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
 
-    // Pour chaque enseignant, récupérer ses spécialités et classes responsables
-    const enseignants = await Promise.all(result.rows.map(async (enseignant) => {
-      // Récupérer les spécialités (matières)
-      const specialitesResult = await query(
-        `SELECT em.id, em.matiere_id, m.nom, m.code, m.coefficient
-         FROM enseignant_matieres em
-         JOIN matieres m ON em.matiere_id = m.id
-         WHERE em.enseignant_id = $1`,
-        [enseignant.id]
-      );
+    const result = await query(sql, [...params, limit, offset]);
 
-      const specialites = specialitesResult.rows.map(row => ({
-        id: row.id,
-        matiere_id: row.matiere_id,
-        matiere: {
-          id: row.matiere_id,
-          nom: row.nom,
-          code: row.code,
-          coefficient: row.coefficient
-        }
-      }));
-
-      // Récupérer les classes dont il est responsable
-      const classesResult = await query(
-        'SELECT id, nom, niveau, cycle FROM classes WHERE enseignant_principal_id = $1',
-        [enseignant.id]
-      );
-
-      return {
-        ...enseignant,
-        specialites,
-        classesCommeResponsable: classesResult.rows
-      };
+    const enseignants = result.rows.map(row => ({
+      ...row,
+      classesCommeResponsable: row.classes_comme_responsable,
+      classes_comme_responsable: undefined,
     }));
 
-    res.json(enseignants);
+    res.json(paginatedResponse(enseignants, total, page, limit));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -159,10 +161,34 @@ exports.createEnseignant = async (req, res) => {
       ]
     );
 
+    const enseignantId = result.rows[0].id;
+
+    if (Array.isArray(data.specialiteIds) && data.specialiteIds.length > 0) {
+      const insertValues = data.specialiteIds.map((_, i) => `($1, $${i + 2})`).join(', ');
+      await query(
+        `INSERT INTO enseignant_matieres (enseignant_id, matiere_id) VALUES ${insertValues} ON CONFLICT DO NOTHING`,
+        [enseignantId, ...data.specialiteIds]
+      );
+    }
+
+    await logAuditEvent({
+      req,
+      userId: req.user?.id || null,
+      action: 'ENSEIGNANT_CREATE',
+      entity: 'ENSEIGNANT',
+      entityId: enseignantId,
+      status: 'SUCCESS',
+      details: {
+        matricule: result.rows[0].matricule,
+        nom: result.rows[0].nom,
+        prenom: result.rows[0].prenom
+      }
+    });
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error('❌ Erreur création enseignant:', error.message);
-    console.error('Détails:', error.detail || error.hint || error);
+    logger.error('❌ Erreur création enseignant:', error.message);
+    logger.error('Détails:', error.detail || error.hint || error);
     res.status(400).json({ message: error.message });
   }
 };
@@ -227,6 +253,29 @@ exports.updateEnseignant = async (req, res) => {
       return res.status(404).json({ message: 'Enseignant non trouvé' });
     }
 
+    if (Array.isArray(data.specialiteIds)) {
+      await query('DELETE FROM enseignant_matieres WHERE enseignant_id = $1', [req.params.id]);
+      if (data.specialiteIds.length > 0) {
+        const insertValues = data.specialiteIds.map((_, i) => `($1, $${i + 2})`).join(', ');
+        await query(
+          `INSERT INTO enseignant_matieres (enseignant_id, matiere_id) VALUES ${insertValues} ON CONFLICT DO NOTHING`,
+          [req.params.id, ...data.specialiteIds]
+        );
+      }
+    }
+
+    await logAuditEvent({
+      req,
+      userId: req.user?.id || null,
+      action: 'ENSEIGNANT_UPDATE',
+      entity: 'ENSEIGNANT',
+      entityId: result.rows[0].id,
+      status: 'SUCCESS',
+      details: {
+        fields: Object.keys(data)
+      }
+    });
+
     res.json(result.rows[0]);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -236,13 +285,26 @@ exports.updateEnseignant = async (req, res) => {
 exports.deleteEnseignant = async (req, res) => {
   try {
     const result = await query(
-      'DELETE FROM enseignants WHERE id = $1 RETURNING id',
+      'DELETE FROM enseignants WHERE id = $1 RETURNING id, nom, prenom',
       [req.params.id]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Enseignant non trouvé' });
     }
+
+    await logAuditEvent({
+      req,
+      userId: req.user?.id || null,
+      action: 'ENSEIGNANT_DELETE',
+      entity: 'ENSEIGNANT',
+      entityId: result.rows[0].id,
+      status: 'SUCCESS',
+      details: {
+        nom: result.rows[0].nom,
+        prenom: result.rows[0].prenom
+      }
+    });
 
     res.json({ message: 'Enseignant supprimé avec succès' });
   } catch (error) {

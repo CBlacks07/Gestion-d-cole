@@ -7,11 +7,14 @@ const {
   updatePaiement,
   deletePaiement,
   getHistoriquePaiements,
-  getPaiementStats
+  getPaiementStats,
+  getSoldeEleve,
+  getElevesImpayes
 } = require('../controllers/paiement.controller');
 const { protect, authorize } = require('../middleware/auth');
 
 router.use(protect);
+router.use(authorize('admin', 'directeur', 'secretaire'));
 
 router.route('/')
   .get(getPaiements)
@@ -19,6 +22,8 @@ router.route('/')
 
 router.get('/stats', getPaiementStats);
 router.get('/historique/:eleveId', getHistoriquePaiements);
+router.get('/solde/:eleveId', getSoldeEleve);
+router.get('/impayes', authorize('admin', 'directeur', 'secretaire'), getElevesImpayes);
 
 router.route('/:id')
   .get(getPaiementById)

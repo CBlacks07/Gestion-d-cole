@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import api from '../services/api'
-import { Eleve, Matiere, Classe } from '../types'
+import { Eleve, Classe } from '../types'
+import { useToast } from '../contexts/ToastContext'
 
 interface NoteFormModalProps {
   isOpen: boolean
@@ -9,11 +10,26 @@ interface NoteFormModalProps {
   onSuccess: () => void
 }
 
+interface MatiereClasse {
+  id: string
+  nom: string
+  code: string
+  coefficient: number
+}
+
+const noteMaxFromCoefficient = (coefficient?: number) => {
+  const coef = Number(coefficient)
+  if (!Number.isFinite(coef) || coef <= 0) return 20
+  return coef * 10
+}
+
 export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormModalProps) {
+  const { error: toastError } = useToast()
   const [loading, setLoading] = useState(false)
   const [eleves, setEleves] = useState<Eleve[]>([])
-  const [matieres, setMatieres] = useState<Matiere[]>([])
+  const [matieres, setMatieres] = useState<MatiereClasse[]>([])
   const [classes, setClasses] = useState<Classe[]>([])
+  const [anneeActive, setAnneeActive] = useState<string>('')
   const [formData, setFormData] = useState({
     eleveId: '',
     matiereId: '',
@@ -21,11 +37,12 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
     typeEvaluation: 'Devoir',
     periode: '1er Trimestre',
     note: '',
-    noteMax: '20',
     coefficient: '1',
     commentaire: '',
     dateEvaluation: new Date().toISOString().split('T')[0]
   })
+  const selectedMatiere = matieres.find(item => item.id === formData.matiereId)
+  const calculatedNoteMax = noteMaxFromCoefficient(Number(formData.coefficient || selectedMatiere?.coefficient || 1))
 
   useEffect(() => {
     if (isOpen) {
@@ -35,14 +52,14 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
 
   const loadData = async () => {
     try {
-      const [elevesRes, matieresRes, classesRes] = await Promise.all([
-        api.get('/eleves'),
-        api.get('/matieres'),
-        api.get('/classes')
+      const [elevesRes, classesRes, anneeRes] = await Promise.all([
+        api.get('/eleves', { params: { all: true } }),
+        api.get('/classes'),
+        api.get('/annees/active')
       ])
 
-      // Mapper les élèves (backend snake_case -> frontend camelCase)
-      const mappedEleves = elevesRes.data
+      const elevesRaw = Array.isArray(elevesRes.data) ? elevesRes.data : (elevesRes.data?.data ?? [])
+      const mappedEleves = elevesRaw
         .map((data: any) => ({
           id: data.id,
           matricule: data.matricule,
@@ -54,28 +71,56 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
             nom: data.classe.nom
           } : null
         }))
-        .filter((e: any) => e.statut === 'ACTIF' || e.statut === 'actif')
+        .filter((e: any) => String(e.statut || '').toUpperCase() === 'ACTIF')
+        .sort((a: any, b: any) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
 
-      // Mapper les matières
-      const mappedMatieres = matieresRes.data.map((data: any) => ({
-        id: data.id,
-        nom: data.nom,
-        code: data.code
-      }))
-
-      // Mapper les classes
-      const mappedClasses = classesRes.data.map((data: any) => ({
-        id: data.id,
-        nom: data.nom,
-        cycle: data.cycle
-      }))
+      const mappedClasses = classesRes.data
+        .map((data: any) => ({
+          id: data.id,
+          nom: data.nom,
+          cycle: data.cycle
+        }))
+        .sort((a: any, b: any) => String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'))
 
       setEleves(mappedEleves)
-      setMatieres(mappedMatieres)
       setClasses(mappedClasses)
+      setAnneeActive(anneeRes.data?.annee || '')
+      setMatieres([])
     } catch (error) {
-      console.error('Erreur lors du chargement des données', error)
+      console.error('Erreur lors du chargement des donnees', error)
     }
+  }
+
+  const loadMatieresClasse = async (classeId: string) => {
+    if (!classeId || !anneeActive) {
+      setMatieres([])
+      return
+    }
+
+    try {
+      const response = await api.get(`/classe-matieres/classe/${classeId}`, {
+        params: { annee_scolaire: anneeActive }
+      })
+
+      const mapped = response.data
+        .map((row: any) => ({
+          id: row.matiere_id,
+          nom: row.nom,
+          code: row.code,
+          coefficient: row.coefficient
+        }))
+        .sort((a: MatiereClasse, b: MatiereClasse) => a.nom.localeCompare(b.nom, 'fr'))
+
+      setMatieres(mapped)
+    } catch (error) {
+      console.error('Erreur lors du chargement des matieres de la classe', error)
+      setMatieres([])
+    }
+  }
+
+  const handleClasseChange = (classeId: string) => {
+    setFormData(prev => ({ ...prev, classeId, matiereId: '', coefficient: '1' }))
+    loadMatieresClasse(classeId)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,6 +128,12 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
     setLoading(true)
 
     try {
+      if (!anneeActive) {
+        toastError('Aucune année scolaire active')
+        setLoading(false)
+        return
+      }
+
       const data = {
         eleveId: formData.eleveId,
         matiereId: formData.matiereId,
@@ -90,11 +141,11 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
         typeEvaluation: formData.typeEvaluation,
         periode: formData.periode,
         note: parseFloat(formData.note),
-        noteMax: parseFloat(formData.noteMax),
+        noteMax: calculatedNoteMax,
         coefficient: parseFloat(formData.coefficient),
         commentaire: formData.commentaire || undefined,
         dateEvaluation: formData.dateEvaluation,
-        anneeScolaire: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1)
+        anneeScolaire: anneeActive
       }
 
       await api.post('/notes', data)
@@ -102,8 +153,8 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
       onClose()
       resetForm()
     } catch (error: any) {
-      console.error('Erreur lors de la création de la note', error)
-      alert(error.response?.data?.message || 'Erreur lors de la création de la note')
+      console.error('Erreur lors de la creation de la note', error)
+      toastError(error.response?.data?.message || 'Erreur lors de la création de la note')
     } finally {
       setLoading(false)
     }
@@ -117,19 +168,18 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
       typeEvaluation: 'Devoir',
       periode: '1er Trimestre',
       note: '',
-      noteMax: '20',
       coefficient: '1',
       commentaire: '',
       dateEvaluation: new Date().toISOString().split('T')[0]
     })
+    setMatieres([])
   }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Ajouter une nouvelle note" size="lg">
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Informations de base */}
         <div>
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Informations de base</h3>
+          <h3 className="text-lg font-display font-semibold mb-4 text-gray-900">Informations de base</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -141,12 +191,10 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
                 value={formData.eleveId}
                 onChange={(e) => {
                   const eleveId = e.target.value
-                  const eleve = eleves.find(e => e.id === eleveId)
-                  setFormData({
-                    ...formData,
-                    eleveId,
-                    classeId: eleve?.classe?.id || ''
-                  })
+                  const eleve = eleves.find(item => item.id === eleveId)
+                  const classeId = eleve?.classe?.id || ''
+                  setFormData(prev => ({ ...prev, eleveId, classeId, matiereId: '', coefficient: '1' }))
+                  loadMatieresClasse(classeId)
                 }}
               >
                 <option value="">Sélectionner un élève...</option>
@@ -157,24 +205,7 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Matière <span className="text-red-500">*</span>
-              </label>
-              <select
-                required
-                className="input"
-                value={formData.matiereId}
-                onChange={(e) => setFormData({ ...formData, matiereId: e.target.value })}
-              >
-                <option value="">Sélectionner une matière...</option>
-                {matieres.map((matiere) => (
-                  <option key={matiere.id} value={matiere.id}>
-                    {matiere.nom}
-                  </option>
-                ))}
-              </select>
-            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Classe <span className="text-red-500">*</span>
@@ -183,7 +214,7 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
                 required
                 className="input"
                 value={formData.classeId}
-                onChange={(e) => setFormData({ ...formData, classeId: e.target.value })}
+                onChange={(e) => handleClasseChange(e.target.value)}
               >
                 <option value="">Sélectionner une classe...</option>
                 {classes.map((classe) => (
@@ -193,6 +224,40 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
                 ))}
               </select>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Matière <span className="text-red-500">*</span>
+              </label>
+              <select
+                required
+                className="input"
+                value={formData.matiereId}
+                onChange={(e) => {
+                  const matiereId = e.target.value
+                  const matiere = matieres.find(item => item.id === matiereId)
+                  setFormData(prev => ({
+                    ...prev,
+                    matiereId,
+                    coefficient: String(matiere?.coefficient || 1)
+                  }))
+                }}
+                disabled={!formData.classeId}
+              >
+                <option value="">Sélectionner une matière...</option>
+                {matieres.map((matiere) => (
+                  <option key={matiere.id} value={matiere.id}>
+                    {matiere.nom} ({matiere.code})
+                  </option>
+                ))}
+              </select>
+              {formData.classeId && matieres.length === 0 && (
+                <p className="text-xs text-amber-700 mt-1">
+                  Aucune matière rattachée à cette classe pour l'année active.
+                </p>
+              )}
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Type d'évaluation <span className="text-red-500">*</span>
@@ -209,6 +274,7 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
                 <option value="Examen">Examen</option>
               </select>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Période <span className="text-red-500">*</span>
@@ -219,10 +285,13 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
                 onChange={(e) => setFormData({ ...formData, periode: e.target.value })}
               >
                 <option value="1er Trimestre">1er Trimestre</option>
-                <option value="2ème Trimestre">2ème Trimestre</option>
-                <option value="3ème Trimestre">3ème Trimestre</option>
+                <option value="2eme Trimestre">2eme Trimestre</option>
+                <option value="3eme Trimestre">3eme Trimestre</option>
+                <option value="1er Semestre">1er Semestre</option>
+                <option value="2eme Semestre">2eme Semestre</option>
               </select>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Date d'évaluation <span className="text-red-500">*</span>
@@ -238,9 +307,8 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
           </div>
         </div>
 
-        {/* Note et coefficient */}
         <div>
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Note et coefficient</h3>
+          <h3 className="text-lg font-display font-semibold mb-4 text-gray-900">Note et coefficient</h3>
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -250,6 +318,7 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
                 type="number"
                 required
                 min="0"
+                max={calculatedNoteMax}
                 step="0.25"
                 className="input"
                 placeholder="15"
@@ -257,6 +326,7 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
                 onChange={(e) => setFormData({ ...formData, note: e.target.value })}
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Note maximale <span className="text-red-500">*</span>
@@ -265,11 +335,13 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
                 type="number"
                 required
                 min="1"
-                className="input"
-                value={formData.noteMax}
-                onChange={(e) => setFormData({ ...formData, noteMax: e.target.value })}
+                className="input bg-gray-100"
+                value={String(calculatedNoteMax)}
+                disabled
+                readOnly
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Coefficient <span className="text-red-500">*</span>
@@ -278,19 +350,17 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
                 type="number"
                 required
                 min="1"
-                className="input"
+                className="input bg-gray-100"
                 value={formData.coefficient}
-                onChange={(e) => setFormData({ ...formData, coefficient: e.target.value })}
+                disabled
+                readOnly
               />
             </div>
           </div>
         </div>
 
-        {/* Commentaire */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Commentaire
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Commentaire</label>
           <textarea
             className="input"
             rows={3}
@@ -300,7 +370,6 @@ export default function NoteFormModal({ isOpen, onClose, onSuccess }: NoteFormMo
           />
         </div>
 
-        {/* Actions */}
         <div className="flex justify-end gap-3 pt-4 border-t">
           <button
             type="button"

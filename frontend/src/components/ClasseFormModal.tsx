@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import api from '../services/api'
 import { Enseignant } from '../types'
+import { useToast } from '../contexts/ToastContext'
 
 interface ClasseFormModalProps {
   isOpen: boolean
@@ -11,8 +12,10 @@ interface ClasseFormModalProps {
 }
 
 export default function ClasseFormModal({ isOpen, onClose, onSuccess, classe }: ClasseFormModalProps) {
+  const { error: toastError } = useToast()
   const [loading, setLoading] = useState(false)
   const [enseignants, setEnseignants] = useState<Enseignant[]>([])
+  const [anneeActive, setAnneeActive] = useState<string>('')
   const [formData, setFormData] = useState({
     nom: '',
     niveau: '',
@@ -22,12 +25,14 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess, classe }: 
     effectifMax: '',
     salle: '',
     montantInscription: '',
-    montantMensuel: ''
+    montantMensuel: '',
+    montantScolarite: ''
   })
 
   useEffect(() => {
     if (isOpen) {
       loadEnseignants()
+      loadAnneeActive()
       if (classe) {
         // Pré-remplir le formulaire en mode édition
         const enumToNiveau: Record<string, string> = {
@@ -54,7 +59,8 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess, classe }: 
           effectifMax: classe.effectifMax?.toString() || classe.effectif_max?.toString() || '',
           salle: classe.salle || '',
           montantInscription: classe.montantInscription?.toString() || classe.montant_inscription?.toString() || '',
-          montantMensuel: classe.montantMensuel?.toString() || classe.montant_mensuel?.toString() || ''
+          montantMensuel: classe.montantMensuel?.toString() || classe.montant_mensuel?.toString() || '',
+          montantScolarite: classe.montantScolarite?.toString() || classe.montant_scolarite?.toString() || ''
         })
       }
     } else {
@@ -64,13 +70,23 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess, classe }: 
 
   const loadEnseignants = async () => {
     try {
-      const response = await api.get('/enseignants')
-      // Filtrer les enseignants actifs (statut en majuscule)
-      setEnseignants(response.data.filter((e: Enseignant) =>
-        e.statut === 'ACTIF' || e.statut === 'actif'
+      const response = await api.get('/enseignants', { params: { limit: 500 } })
+      const raw = Array.isArray(response.data) ? response.data : (response.data?.data ?? [])
+      setEnseignants(raw.filter((e: Enseignant) =>
+        String(e.statut || '').toUpperCase() === 'ACTIF'
       ))
     } catch (error) {
       console.error('Erreur lors du chargement des enseignants', error)
+    }
+  }
+
+  const loadAnneeActive = async () => {
+    try {
+      const response = await api.get('/annees/active')
+      setAnneeActive(response.data?.annee || '')
+    } catch (error) {
+      console.error('Erreur lors du chargement de l annee active', error)
+      setAnneeActive('')
     }
   }
 
@@ -84,7 +100,8 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess, classe }: 
       effectifMax: '',
       salle: '',
       montantInscription: '',
-      montantMensuel: ''
+      montantMensuel: '',
+      montantScolarite: ''
     })
   }
 
@@ -120,6 +137,16 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess, classe }: 
       // Convertir le cycle et le niveau vers les enums sans accents
       const cycleEnum = cycleToEnum[formData.cycle] || formData.cycle.toUpperCase()
       const niveauEnum = niveauToEnum[formData.niveau] || formData.niveau.toUpperCase()
+      const anneeScolaire =
+        classe?.anneeScolaire ||
+        classe?.annee_scolaire ||
+        anneeActive
+
+      if (!anneeScolaire) {
+        toastError('Aucune année scolaire active. Activez une année avant de sauvegarder.')
+        setLoading(false)
+        return
+      }
 
       const data = {
         nom: formData.nom,
@@ -129,9 +156,10 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess, classe }: 
         enseignantPrincipalId: formData.enseignantPrincipal || undefined,
         effectifMax: parseInt(formData.effectifMax) || 50,
         salle: formData.salle || undefined,
-        anneeScolaire: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
+        anneeScolaire,
         montantInscription: parseFloat(formData.montantInscription) || 0,
         montantMensuel: parseFloat(formData.montantMensuel) || 0,
+        montantScolarite: parseFloat(formData.montantScolarite) || 0,
         devise: 'XOF'
       }
 
@@ -147,7 +175,7 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess, classe }: 
       resetForm()
     } catch (error: any) {
       console.error('Erreur lors de la sauvegarde de la classe', error)
-      alert(error.response?.data?.message || 'Erreur lors de la sauvegarde de la classe')
+      toastError(error.response?.data?.message || 'Erreur lors de la sauvegarde de la classe')
     } finally {
       setLoading(false)
     }
@@ -163,7 +191,7 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess, classe }: 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Informations de base */}
         <div>
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Informations de base</h3>
+          <h3 className="text-lg font-display font-semibold mb-4 text-gray-900">Informations de base</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -271,32 +299,46 @@ export default function ClasseFormModal({ isOpen, onClose, onSuccess, classe }: 
 
         {/* Frais de scolarité */}
         <div>
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Frais de scolarité</h3>
+          <h3 className="text-lg font-display font-semibold mb-1 text-gray-900">Frais de scolarité</h3>
+          <p className="text-xs text-gray-500 mb-4">Définissez les montants applicables à cette classe pour l'année scolaire.</p>
           <div className="grid grid-cols-2 gap-4">
-            <div>
+            <div className="col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Montant inscription (FCFA) <span className="text-red-500">*</span>
+                Frais de scolarité annuel (FCFA) <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
                 required
                 min="0"
                 className="input"
-                placeholder="50000"
+                placeholder="Ex: 120000"
+                value={formData.montantScolarite}
+                onChange={(e) => setFormData({ ...formData, montantScolarite: e.target.value })}
+              />
+              <p className="mt-1 text-xs text-gray-400">Montant total de scolarité dû pour toute l'année scolaire (référence pour le suivi des paiements).</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Frais d'inscription (FCFA)
+              </label>
+              <input
+                type="number"
+                min="0"
+                className="input"
+                placeholder="Ex: 15000"
                 value={formData.montantInscription}
                 onChange={(e) => setFormData({ ...formData, montantInscription: e.target.value })}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Montant mensuel (FCFA) <span className="text-red-500">*</span>
+                Mensualité (FCFA)
               </label>
               <input
                 type="number"
-                required
                 min="0"
                 className="input"
-                placeholder="25000"
+                placeholder="Ex: 10000"
                 value={formData.montantMensuel}
                 onChange={(e) => setFormData({ ...formData, montantMensuel: e.target.value })}
               />

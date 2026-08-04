@@ -1,4 +1,5 @@
 const { query } = require('../lib/db');
+const { logAuditEvent } = require('../lib/audit');
 
 exports.getClasses = async (req, res) => {
   try {
@@ -7,7 +8,8 @@ exports.getClasses = async (req, res) => {
     let sql = `
       SELECT c.*,
              e.id as enseignant_id, e.nom as enseignant_nom, e.prenom as enseignant_prenom,
-             e.matricule as enseignant_matricule
+             e.matricule as enseignant_matricule,
+             (SELECT COUNT(*) FROM eleves el WHERE el.classe_id = c.id AND el.statut = 'ACTIF') AS effectif_actuel
       FROM classes c
       LEFT JOIN enseignants e ON c.enseignant_principal_id = e.id
       WHERE 1=1
@@ -27,17 +29,24 @@ exports.getClasses = async (req, res) => {
       paramIndex++;
     }
 
+    // Si l'utilisateur est un enseignant, limiter aux classes qui lui sont attribuées
+    // (comme titulaire de classe OU comme enseignant d'une matière dans cette classe)
+    if (req.user.role === 'ENSEIGNANT' && req.user.enseignant_id) {
+      sql += ` AND (
+        c.enseignant_principal_id = $${paramIndex}
+        OR c.id IN (
+          SELECT DISTINCT cm.classe_id FROM classe_matieres cm WHERE cm.enseignant_id = $${paramIndex}
+        )
+      )`;
+      params.push(req.user.enseignant_id);
+      paramIndex++;
+    }
+
     sql += ` ORDER BY c.cycle ASC, c.niveau ASC`;
 
     const result = await query(sql, params);
 
-    // Pour chaque classe, calculer l'effectif actuel
-    const classesWithEffectif = await Promise.all(result.rows.map(async (row) => {
-      const effectifResult = await query(
-        'SELECT COUNT(*) as count FROM eleves WHERE classe_id = $1 AND statut = $2',
-        [row.id, 'ACTIF']
-      );
-
+    const classesWithEffectif = result.rows.map((row) => {
       const classe = {
         id: row.id,
         nom: row.nom,
@@ -50,10 +59,11 @@ exports.getClasses = async (req, res) => {
         salle: row.salle,
         montant_inscription: row.montant_inscription,
         montant_mensuel: row.montant_mensuel,
+        montant_scolarite: row.montant_scolarite,
         devise: row.devise,
         created_at: row.created_at,
         updated_at: row.updated_at,
-        effectifActuel: parseInt(effectifResult.rows[0].count)
+        effectifActuel: parseInt(row.effectif_actuel || '0')
       };
 
       if (row.enseignant_principal_id) {
@@ -66,7 +76,7 @@ exports.getClasses = async (req, res) => {
       }
 
       return classe;
-    }));
+    });
 
     res.json(classesWithEffectif);
   } catch (error) {
@@ -76,6 +86,13 @@ exports.getClasses = async (req, res) => {
 
 exports.getClasseById = async (req, res) => {
   try {
+    const isEnseignant = String(req.user?.role || '').toUpperCase() === 'ENSEIGNANT';
+    const enseignantId = req.user?.enseignant_id || null;
+
+    if (isEnseignant && !enseignantId) {
+      return res.status(403).json({ message: 'Compte enseignant non lie a un profil enseignant' });
+    }
+
     const result = await query(
       `SELECT c.*,
               e.id as enseignant_id, e.nom as enseignant_nom, e.prenom as enseignant_prenom,
@@ -87,12 +104,34 @@ exports.getClasseById = async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Classe non trouvée' });
+      return res.status(404).json({ message: 'Classe non trouvee' });
     }
 
     const row = result.rows[0];
 
-    // Récupérer les élèves de la classe
+    if (isEnseignant) {
+      const accessResult = await query(
+        `SELECT
+           EXISTS (
+             SELECT 1
+             FROM classes c
+             WHERE c.id = $1
+               AND c.enseignant_principal_id = $2
+           ) AS is_principal,
+           EXISTS (
+             SELECT 1
+             FROM classe_matieres cm
+             WHERE cm.classe_id = $1
+               AND cm.enseignant_id = $2
+           ) AS has_subject`,
+        [row.id, enseignantId]
+      );
+
+      if (!accessResult.rows[0]?.is_principal && !accessResult.rows[0]?.has_subject) {
+        return res.status(403).json({ message: 'Acces refuse a cette classe' });
+      }
+    }
+
     const elevesResult = await query(
       'SELECT * FROM eleves WHERE classe_id = $1 AND statut = $2 ORDER BY nom, prenom',
       [row.id, 'ACTIF']
@@ -110,6 +149,7 @@ exports.getClasseById = async (req, res) => {
       salle: row.salle,
       montant_inscription: row.montant_inscription,
       montant_mensuel: row.montant_mensuel,
+      montant_scolarite: row.montant_scolarite,
       devise: row.devise,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -143,8 +183,8 @@ exports.createClasse = async (req, res) => {
     const result = await query(
       `INSERT INTO classes (
         nom, niveau, cycle, section, annee_scolaire, enseignant_principal_id,
-        effectif_max, salle, montant_inscription, montant_mensuel, devise
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        effectif_max, salle, montant_inscription, montant_mensuel, montant_scolarite, devise
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *`,
       [
         data.nom,
@@ -155,11 +195,27 @@ exports.createClasse = async (req, res) => {
         data.enseignantPrincipalId || data.enseignant_principal_id || null,
         data.effectifMax || data.effectif_max,
         data.salle,
-        data.montantInscription || data.montant_inscription,
-        data.montantMensuel || data.montant_mensuel,
+        data.montantInscription || data.montant_inscription || 0,
+        data.montantMensuel || data.montant_mensuel || 0,
+        data.montantScolarite || data.montant_scolarite || 0,
         data.devise || 'XOF'
       ]
     );
+
+    await logAuditEvent({
+      req,
+      userId: req.user?.id || null,
+      action: 'CLASSE_CREATE',
+      entity: 'CLASSE',
+      entityId: result.rows[0].id,
+      status: 'SUCCESS',
+      details: {
+        nom: result.rows[0].nom,
+        niveau: result.rows[0].niveau,
+        cycle: result.rows[0].cycle,
+        anneeScolaire: result.rows[0].annee_scolaire
+      }
+    });
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -196,6 +252,8 @@ exports.updateClasse = async (req, res) => {
       montant_inscription: 'montant_inscription',
       montantMensuel: 'montant_mensuel',
       montant_mensuel: 'montant_mensuel',
+      montantScolarite: 'montant_scolarite',
+      montant_scolarite: 'montant_scolarite',
       devise: 'devise'
     };
 
@@ -221,6 +279,18 @@ exports.updateClasse = async (req, res) => {
       return res.status(404).json({ message: 'Classe non trouvée' });
     }
 
+    await logAuditEvent({
+      req,
+      userId: req.user?.id || null,
+      action: 'CLASSE_UPDATE',
+      entity: 'CLASSE',
+      entityId: result.rows[0].id,
+      status: 'SUCCESS',
+      details: {
+        fields: Object.keys(data)
+      }
+    });
+
     res.json(result.rows[0]);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -230,16 +300,29 @@ exports.updateClasse = async (req, res) => {
 exports.deleteClasse = async (req, res) => {
   try {
     const result = await query(
-      'DELETE FROM classes WHERE id = $1 RETURNING id',
+      'DELETE FROM classes WHERE id = $1 RETURNING id, nom',
       [req.params.id]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Classe non trouvée' });
     }
+    await logAuditEvent({
+      req,
+      userId: req.user?.id || null,
+      action: 'CLASSE_DELETE',
+      entity: 'CLASSE',
+      entityId: result.rows[0].id,
+      status: 'SUCCESS',
+      details: {
+        nom: result.rows[0].nom
+      }
+    });
 
-    res.json({ message: 'Classe supprimée avec succès' });
+    res.json({ message: 'Classe supprimee avec succes' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
+
+

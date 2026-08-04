@@ -4,6 +4,7 @@ const {
   getNotes,
   getNoteById,
   createNote,
+  createNotesBatch,
   updateNote,
   deleteNote,
   getBulletin
@@ -16,11 +17,13 @@ router.route('/')
   .get(getNotes)
   .post(authorize('admin', 'directeur', 'enseignant'), createNote);
 
-router.get('/bulletin/:eleveId', getBulletin);
+router.post('/batch', authorize('admin', 'directeur', 'enseignant'), createNotesBatch);
+
+router.get('/bulletin/:eleveId', authorize('admin', 'directeur', 'secretaire'), getBulletin);
 
 router.route('/:id')
   .get(getNoteById)
   .put(authorize('admin', 'directeur', 'enseignant'), updateNote)
-  .delete(authorize('admin', 'directeur'), deleteNote);
+  .delete(authorize('admin', 'directeur', 'enseignant'), deleteNote);
 
 module.exports = router;

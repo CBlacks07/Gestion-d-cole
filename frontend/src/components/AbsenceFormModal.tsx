@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Modal from './Modal'
 import api from '../services/api'
-import { Eleve, Classe, Matiere } from '../types'
+import { Eleve, Classe } from '../types'
+import { useToast } from '../contexts/ToastContext'
 
 interface AbsenceFormModalProps {
   isOpen: boolean
@@ -9,17 +10,28 @@ interface AbsenceFormModalProps {
   onSuccess: () => void
 }
 
+interface MatiereClasse {
+  id: string
+  nom: string
+  code: string
+}
+
 export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: AbsenceFormModalProps) {
+  const { error: toastError } = useToast()
   const [loading, setLoading] = useState(false)
   const [eleves, setEleves] = useState<Eleve[]>([])
   const [classes, setClasses] = useState<Classe[]>([])
-  const [matieres, setMatieres] = useState<Matiere[]>([])
+  const [matieres, setMatieres] = useState<MatiereClasse[]>([])
+  const [anneeActive, setAnneeActive] = useState<string>('')
+  const [eleveSearch, setEleveSearch] = useState('')
+  const [showEleveDropdown, setShowEleveDropdown] = useState(false)
+  const eleveDropdownRef = useRef<HTMLDivElement>(null)
   const [formData, setFormData] = useState({
     eleveId: '',
     classeId: '',
     matiereId: '',
     date: new Date().toISOString().split('T')[0],
-    periode: 'Toute la journée',
+    periode: 'TOUTE_JOURNEE',
     justifiee: false,
     motif: ''
   })
@@ -30,16 +42,32 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
     }
   }, [isOpen])
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (eleveDropdownRef.current && !eleveDropdownRef.current.contains(e.target as Node)) {
+        setShowEleveDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const filteredEleveSuggestions = eleveSearch.trim().length >= 1
+    ? eleves.filter(e =>
+        `${e.prenom} ${e.nom} ${e.matricule}`.toLowerCase().includes(eleveSearch.toLowerCase())
+      ).slice(0, 8)
+    : []
+
   const loadData = async () => {
     try {
-      const [elevesRes, classesRes, matieresRes] = await Promise.all([
-        api.get('/eleves'),
+      const [elevesRes, classesRes, anneeRes] = await Promise.all([
+        api.get('/eleves', { params: { all: true } }),
         api.get('/classes'),
-        api.get('/matieres')
+        api.get('/annees/active')
       ])
 
-      // Mapper les élèves (backend snake_case -> frontend camelCase)
-      const mappedEleves = elevesRes.data
+      const elevesRaw = Array.isArray(elevesRes.data) ? elevesRes.data : (elevesRes.data?.data ?? [])
+      const mappedEleves = elevesRaw
         .map((data: any) => ({
           id: data.id,
           matricule: data.matricule,
@@ -51,28 +79,55 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
             nom: data.classe.nom
           } : null
         }))
-        .filter((e: any) => e.statut === 'ACTIF' || e.statut === 'actif')
+        .filter((e: any) => String(e.statut || '').toUpperCase() === 'ACTIF')
+        .sort((a: any, b: any) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
 
-      // Mapper les classes
-      const mappedClasses = classesRes.data.map((data: any) => ({
-        id: data.id,
-        nom: data.nom,
-        cycle: data.cycle
-      }))
-
-      // Mapper les matières
-      const mappedMatieres = matieresRes.data.map((data: any) => ({
-        id: data.id,
-        nom: data.nom,
-        code: data.code
-      }))
+      const mappedClasses = classesRes.data
+        .map((data: any) => ({
+          id: data.id,
+          nom: data.nom,
+          cycle: data.cycle
+        }))
+        .sort((a: any, b: any) => String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'))
 
       setEleves(mappedEleves)
       setClasses(mappedClasses)
-      setMatieres(mappedMatieres)
+      setAnneeActive(anneeRes.data?.annee || '')
+      setMatieres([])
     } catch (error) {
-      console.error('Erreur lors du chargement des données', error)
+      console.error('Erreur lors du chargement des donnees', error)
     }
+  }
+
+  const loadMatieresClasse = async (classeId: string) => {
+    if (!classeId || !anneeActive) {
+      setMatieres([])
+      return
+    }
+
+    try {
+      const response = await api.get(`/classe-matieres/classe/${classeId}`, {
+        params: { annee_scolaire: anneeActive }
+      })
+
+      const mapped = response.data
+        .map((row: any) => ({
+          id: row.matiere_id,
+          nom: row.nom,
+          code: row.code
+        }))
+        .sort((a: MatiereClasse, b: MatiereClasse) => a.nom.localeCompare(b.nom, 'fr'))
+
+      setMatieres(mapped)
+    } catch (error) {
+      console.error('Erreur lors du chargement des matieres de la classe', error)
+      setMatieres([])
+    }
+  }
+
+  const handleClasseChange = (classeId: string) => {
+    setFormData(prev => ({ ...prev, classeId, matiereId: '' }))
+    loadMatieresClasse(classeId)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,6 +135,12 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
     setLoading(true)
 
     try {
+      if (!anneeActive) {
+        toastError('Aucune année scolaire active')
+        setLoading(false)
+        return
+      }
+
       const data = {
         eleveId: formData.eleveId,
         classeId: formData.classeId,
@@ -88,7 +149,7 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
         periode: formData.periode,
         justifiee: formData.justifiee,
         motif: formData.motif || undefined,
-        anneeScolaire: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1)
+        anneeScolaire: anneeActive
       }
 
       await api.post('/absences', data)
@@ -96,8 +157,8 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
       onClose()
       resetForm()
     } catch (error: any) {
-      console.error('Erreur lors de la création de l\'absence', error)
-      alert(error.response?.data?.message || 'Erreur lors de la création de l\'absence')
+      console.error('Erreur lors de la creation de l absence', error)
+      toastError(error.response?.data?.message || 'Erreur lors de la création de l\'absence')
     } finally {
       setLoading(false)
     }
@@ -109,45 +170,74 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
       classeId: '',
       matiereId: '',
       date: new Date().toISOString().split('T')[0],
-      periode: 'Toute la journée',
+      periode: 'TOUTE_JOURNEE',
       justifiee: false,
       motif: ''
     })
+    setMatieres([])
+    setEleveSearch('')
+    setShowEleveDropdown(false)
   }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Enregistrer une absence" size="lg">
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Informations de base */}
         <div>
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Informations de base</h3>
+          <h3 className="text-lg font-display font-semibold mb-4 text-gray-900">Informations de base</h3>
           <div className="grid grid-cols-2 gap-4">
-            <div>
+            <div ref={eleveDropdownRef} className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Élève <span className="text-red-500">*</span>
               </label>
-              <select
-                required
+              <input
+                type="text"
+                required={!formData.eleveId}
                 className="input"
-                value={formData.eleveId}
+                placeholder="Rechercher par nom ou matricule..."
+                value={eleveSearch}
                 onChange={(e) => {
-                  const eleveId = e.target.value
-                  const eleve = eleves.find(e => e.id === eleveId)
-                  setFormData({
-                    ...formData,
-                    eleveId,
-                    classeId: eleve?.classe?.id || ''
-                  })
+                  setEleveSearch(e.target.value)
+                  setShowEleveDropdown(true)
+                  if (!e.target.value) {
+                    setFormData(prev => ({ ...prev, eleveId: '', classeId: '', matiereId: '' }))
+                  }
                 }}
-              >
-                <option value="">Sélectionner un élève...</option>
-                {eleves.map((eleve) => (
-                  <option key={eleve.id} value={eleve.id}>
-                    {eleve.prenom} {eleve.nom} - {eleve.classe?.nom || 'Sans classe'}
-                  </option>
-                ))}
-              </select>
+                onFocus={() => { if (eleveSearch) setShowEleveDropdown(true) }}
+                autoComplete="off"
+              />
+              {formData.eleveId && (
+                <p className="mt-1 text-xs text-green-700 font-medium">
+                  ✓ {eleves.find(e => e.id === formData.eleveId)?.prenom} {eleves.find(e => e.id === formData.eleveId)?.nom}
+                </p>
+              )}
+              {showEleveDropdown && filteredEleveSuggestions.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-52 overflow-y-auto">
+                  {filteredEleveSuggestions.map(eleve => (
+                    <button
+                      key={eleve.id}
+                      type="button"
+                      className="w-full text-left px-3 py-2.5 hover:bg-primary-50 transition-colors border-b border-gray-50 last:border-0"
+                      onClick={() => {
+                        const classeId = eleve.classe?.id || ''
+                        setFormData(prev => ({ ...prev, eleveId: eleve.id, classeId, matiereId: '' }))
+                        setEleveSearch(`${eleve.prenom} ${eleve.nom}`)
+                        setShowEleveDropdown(false)
+                        loadMatieresClasse(classeId)
+                      }}
+                    >
+                      <p className="text-sm font-medium text-gray-900">{eleve.prenom} {eleve.nom}</p>
+                      <p className="text-xs text-gray-500">{eleve.matricule} · {eleve.classe?.nom || 'Sans classe'}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {showEleveDropdown && eleveSearch.trim().length >= 1 && filteredEleveSuggestions.length === 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg px-3 py-3 text-sm text-gray-500">
+                  Aucun élève trouvé
+                </div>
+              )}
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Classe <span className="text-red-500">*</span>
@@ -156,7 +246,7 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
                 required
                 className="input"
                 value={formData.classeId}
-                onChange={(e) => setFormData({ ...formData, classeId: e.target.value })}
+                onChange={(e) => handleClasseChange(e.target.value)}
               >
                 <option value="">Sélectionner une classe...</option>
                 {classes.map((classe) => (
@@ -166,6 +256,7 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
                 ))}
               </select>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Date <span className="text-red-500">*</span>
@@ -178,6 +269,7 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Période <span className="text-red-500">*</span>
@@ -187,34 +279,38 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
                 value={formData.periode}
                 onChange={(e) => setFormData({ ...formData, periode: e.target.value })}
               >
-                <option value="Matin">Matin</option>
-                <option value="Après-midi">Après-midi</option>
-                <option value="Toute la journée">Toute la journée</option>
+                <option value="MATIN">Matin</option>
+                <option value="APRES_MIDI">Après-midi</option>
+                <option value="TOUTE_JOURNEE">Toute la journée</option>
               </select>
             </div>
+
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Matière (optionnel)
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Matière (optionnel)</label>
               <select
                 className="input"
                 value={formData.matiereId}
                 onChange={(e) => setFormData({ ...formData, matiereId: e.target.value })}
+                disabled={!formData.classeId}
               >
-                <option value="">Toutes les matières</option>
+                <option value="">Toutes les matieres</option>
                 {matieres.map((matiere) => (
                   <option key={matiere.id} value={matiere.id}>
                     {matiere.nom}
                   </option>
                 ))}
               </select>
+              {formData.classeId && matieres.length === 0 && (
+                <p className="text-xs text-amber-700 mt-1">
+                  Aucune matière rattachée à cette classe pour l'année active.
+                </p>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Justification */}
         <div>
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Justification</h3>
+          <h3 className="text-lg font-display font-semibold mb-4 text-gray-900">Justification</h3>
           <div className="space-y-4">
             <div className="flex items-center">
               <input
@@ -236,7 +332,7 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
                 className="input"
                 rows={3}
                 required={formData.justifiee}
-                placeholder="Ex: Maladie, rendez-vous médical, événement familial..."
+                placeholder="Ex: Maladie, rendez-vous medical, evenement familial..."
                 value={formData.motif}
                 onChange={(e) => setFormData({ ...formData, motif: e.target.value })}
               />
@@ -244,7 +340,6 @@ export default function AbsenceFormModal({ isOpen, onClose, onSuccess }: Absence
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex justify-end gap-3 pt-4 border-t">
           <button
             type="button"
