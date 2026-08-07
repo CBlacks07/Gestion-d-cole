@@ -1,4 +1,4 @@
-const { query } = require('../lib/db');
+const { queryScoped } = require('../lib/db');
 const { logAuditEvent } = require('../lib/audit');
 
 exports.getAbsences = async (req, res) => {
@@ -51,7 +51,7 @@ exports.getAbsences = async (req, res) => {
 
     sql += ` ORDER BY a.date DESC`;
 
-    const result = await query(sql, params);
+    const result = await queryScoped(req.ecoleId, sql, params);
 
     // Reformater les résultats
     const absences = result.rows.map(row => ({
@@ -92,7 +92,8 @@ exports.getAbsences = async (req, res) => {
 
 exports.getAbsenceById = async (req, res) => {
   try {
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `SELECT a.*,
               e.id as eleve_id, e.nom as eleve_nom, e.prenom as eleve_prenom, e.matricule as eleve_matricule,
               c.id as classe_id, c.nom as classe_nom,
@@ -157,11 +158,12 @@ exports.createAbsence = async (req, res) => {
       data.periode = data.periode.toUpperCase().replace(/[\s-]+/g, '_');
     }
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `INSERT INTO absences (
         eleve_id, classe_id, date, matiere_id, periode, justifiee,
-        motif, justificatif, annee_scolaire, enregistre_par_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        motif, justificatif, annee_scolaire, enregistre_par_id, ecole_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *`,
       [
         data.eleveId || data.eleve_id,
@@ -173,7 +175,8 @@ exports.createAbsence = async (req, res) => {
         data.motif || null,
         data.justificatif || null,
         data.anneeScolaire || data.annee_scolaire,
-        data.enregistreParId || data.enregistre_par_id
+        data.enregistreParId || data.enregistre_par_id,
+        req.ecoleId
       ]
     );
 
@@ -242,7 +245,7 @@ exports.updateAbsence = async (req, res) => {
     values.push(req.params.id);
 
     const sql = `UPDATE absences SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
-    const result = await query(sql, values);
+    const result = await queryScoped(req.ecoleId, sql, values);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Absence non trouvée' });
@@ -268,7 +271,8 @@ exports.updateAbsence = async (req, res) => {
 
 exports.deleteAbsence = async (req, res) => {
   try {
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       'DELETE FROM absences WHERE id = $1 RETURNING id, eleve_id, classe_id, annee_scolaire',
       [req.params.id]
     );
@@ -312,13 +316,15 @@ exports.getAbsenceStats = async (req, res) => {
     }
 
     // Total d'absences
-    const totalResult = await query(
+    const totalResult = await queryScoped(
+      req.ecoleId,
       `SELECT COUNT(*) as count FROM absences ${whereClause}`,
       params
     );
 
     // Absences justifiées
-    const justifieesResult = await query(
+    const justifieesResult = await queryScoped(
+      req.ecoleId,
       `SELECT COUNT(*) as count FROM absences ${whereClause} AND justifiee = true`,
       params
     );

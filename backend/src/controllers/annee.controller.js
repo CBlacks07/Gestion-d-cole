@@ -1,10 +1,11 @@
-const { query } = require('../lib/db');
+const { queryScoped } = require('../lib/db');
 const logger = require('../lib/logger');
 
 // Récupérer toutes les années scolaires
 exports.getAnnees = async (req, res) => {
   try {
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `SELECT * FROM annees_scolaires ORDER BY annee DESC`
     );
     res.json(result.rows);
@@ -17,7 +18,8 @@ exports.getAnnees = async (req, res) => {
 // Récupérer l'année active
 exports.getAnneeActive = async (req, res) => {
   try {
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `SELECT * FROM annees_scolaires WHERE active = true LIMIT 1`
     );
 
@@ -39,14 +41,15 @@ exports.createAnnee = async (req, res) => {
 
     // Si active = true, désactiver les autres années
     if (active) {
-      await query(`UPDATE annees_scolaires SET active = false`);
+      await queryScoped(req.ecoleId, `UPDATE annees_scolaires SET active = false`);
     }
 
-    const result = await query(
-      `INSERT INTO annees_scolaires (annee, date_debut, date_fin, active)
-       VALUES ($1, $2, $3, $4)
+    const result = await queryScoped(
+      req.ecoleId,
+      `INSERT INTO annees_scolaires (annee, date_debut, date_fin, active, ecole_id)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [annee, date_debut, date_fin, active || false]
+      [annee, date_debut, date_fin, active || false, req.ecoleId]
     );
 
     res.status(201).json(result.rows[0]);
@@ -67,7 +70,7 @@ exports.updateAnnee = async (req, res) => {
     }
 
     // Vérifier que l'année existe
-    const existing = await query('SELECT * FROM annees_scolaires WHERE id = $1', [id]);
+    const existing = await queryScoped(req.ecoleId, 'SELECT * FROM annees_scolaires WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ message: 'Année scolaire non trouvée' });
     }
@@ -81,7 +84,8 @@ exports.updateAnnee = async (req, res) => {
       return res.status(400).json({ message: 'La date de fin doit être postérieure à la date de début' });
     }
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `UPDATE annees_scolaires
        SET date_debut = $1, date_fin = $2, updated_at = NOW()
        WHERE id = $3
@@ -101,7 +105,7 @@ exports.cloturerAnnee = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const existing = await query('SELECT * FROM annees_scolaires WHERE id = $1', [id]);
+    const existing = await queryScoped(req.ecoleId, 'SELECT * FROM annees_scolaires WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ message: 'Année scolaire non trouvée' });
     }
@@ -113,7 +117,8 @@ exports.cloturerAnnee = async (req, res) => {
     }
 
     // Désactiver l'année (clôturer = désactiver sans en activer une autre)
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `UPDATE annees_scolaires
        SET active = false, updated_at = NOW()
        WHERE id = $1
@@ -134,10 +139,11 @@ exports.activerAnnee = async (req, res) => {
     const { id } = req.params;
 
     // Désactiver toutes les années
-    await query(`UPDATE annees_scolaires SET active = false`);
+    await queryScoped(req.ecoleId, `UPDATE annees_scolaires SET active = false`);
 
     // Activer l'année sélectionnée
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `UPDATE annees_scolaires
        SET active = true, updated_at = NOW()
        WHERE id = $1

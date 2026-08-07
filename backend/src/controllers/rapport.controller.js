@@ -1,4 +1,4 @@
-const { query } = require('../lib/db');
+const { queryScoped } = require('../lib/db');
 
 const normalizeValue = (value) => {
   if (value === undefined || value === null) return '';
@@ -84,7 +84,8 @@ exports.getDashboard = async (req, res) => {
         notesSaisiesMoisResult,
         matieresAttribueesResult
       ] = await Promise.all([
-        query(
+        queryScoped(
+          req.ecoleId,
           `${classesCte}
            SELECT COUNT(*) as count
            FROM eleves e
@@ -93,13 +94,15 @@ exports.getDashboard = async (req, res) => {
              ${anneeScolaire ? 'AND e.annee_scolaire = $2' : ''}`,
           params
         ),
-        query(
+        queryScoped(
+          req.ecoleId,
           `${classesCte}
            SELECT COUNT(*) as count
            FROM my_classes`,
           params
         ),
-        query(
+        queryScoped(
+          req.ecoleId,
           `${classesCte}
            SELECT mc.cycle, COUNT(e.id) as count
            FROM my_classes mc
@@ -111,7 +114,8 @@ exports.getDashboard = async (req, res) => {
            ORDER BY mc.cycle`,
           params
         ),
-        query(
+        queryScoped(
+          req.ecoleId,
           `${classesCte}
            SELECT COUNT(*) as count
            FROM absences a
@@ -120,7 +124,8 @@ exports.getDashboard = async (req, res) => {
              ${anneeScolaire ? 'AND a.annee_scolaire = $2' : ''}`,
           params
         ),
-        query(
+        queryScoped(
+          req.ecoleId,
           `SELECT COUNT(*) as count
            FROM notes n
            WHERE n.enseignant_id = $1
@@ -128,7 +133,8 @@ exports.getDashboard = async (req, res) => {
              ${anneeScolaire ? 'AND n.annee_scolaire = $2' : ''}`,
           params
         ),
-        query(
+        queryScoped(
+          req.ecoleId,
           `SELECT COUNT(DISTINCT x.matiere_id) as count
            FROM (
              SELECT cm.matiere_id
@@ -193,11 +199,12 @@ exports.getDashboard = async (req, res) => {
       recettesScolariteResult
     ] = await Promise.all([
       // Élèves actifs
-      query(`SELECT COUNT(*) as count FROM eleves WHERE statut = 'ACTIF'${anneeFilter}`, p),
+      queryScoped(req.ecoleId, `SELECT COUNT(*) as count FROM eleves WHERE statut = 'ACTIF'${anneeFilter}`, p),
       // Classes
-      query(`SELECT COUNT(*) as count FROM classes WHERE 1=1${anneeFilter}`, p),
+      queryScoped(req.ecoleId, `SELECT COUNT(*) as count FROM classes WHERE 1=1${anneeFilter}`, p),
       // Élèves par cycle
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT c.cycle, COUNT(e.id) as count
          FROM eleves e
          JOIN classes c ON e.classe_id = c.id
@@ -206,23 +213,26 @@ exports.getDashboard = async (req, res) => {
         p
       ),
       // Recettes validées (tous types)
-      query(`SELECT COALESCE(SUM(montant),0) as total FROM paiements WHERE statut = 'VALIDE'${anneeFilter}`, p),
+      queryScoped(req.ecoleId, `SELECT COALESCE(SUM(montant),0) as total FROM paiements WHERE statut = 'VALIDE'${anneeFilter}`, p),
       // Paiements en attente
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT COUNT(*) as count, COALESCE(SUM(montant),0) as total
          FROM paiements WHERE statut = 'EN_ATTENTE'${anneeFilter}`,
         p
       ),
       // Enseignants actifs
-      query(`SELECT COUNT(*) as count FROM enseignants WHERE statut = 'ACTIF'`, []),
+      queryScoped(req.ecoleId, `SELECT COUNT(*) as count FROM enseignants WHERE statut = 'ACTIF'`, []),
       // Absences ce mois
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT COUNT(*) as count FROM absences
          WHERE date >= date_trunc('month', CURRENT_DATE)${anneeFilter}`,
         p
       ),
       // Élèves avec 3+ absences non justifiées ce mois
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT e.id, e.nom, e.prenom, COUNT(a.id) as nb_absences
          FROM absences a
          JOIN eleves e ON a.eleve_id = e.id
@@ -235,7 +245,8 @@ exports.getDashboard = async (req, res) => {
         p
       ),
       // Derniers élèves inscrits
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT id, nom, prenom, matricule, created_at
          FROM eleves
          WHERE statut = 'ACTIF'${anneeFilter}
@@ -244,7 +255,8 @@ exports.getDashboard = async (req, res) => {
         p
       ),
       // Paiements récents
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT p.id, p.montant, p.type_paiement, p.date_paiement, p.statut,
                 e.nom as eleve_nom, e.prenom as eleve_prenom
          FROM paiements p
@@ -255,7 +267,8 @@ exports.getDashboard = async (req, res) => {
         p
       ),
       // Total scolarité attendu (montant_scolarite * nb élèves actifs avec classe)
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT COALESCE(SUM(c.montant_scolarite), 0) as total
          FROM eleves e
          JOIN classes c ON e.classe_id = c.id
@@ -264,7 +277,8 @@ exports.getDashboard = async (req, res) => {
         p
       ),
       // Élèves impayés (ont payé moins que montant_scolarite)
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT
            COUNT(DISTINCT e.id) as count,
            COALESCE(SUM(c.montant_scolarite - COALESCE(pv.total_paye, 0)), 0) as reste
@@ -282,7 +296,8 @@ exports.getDashboard = async (req, res) => {
         p
       ),
       // Recettes scolarité uniquement (validées)
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT COALESCE(SUM(montant), 0) as total
          FROM paiements
          WHERE statut = 'VALIDE' AND type_paiement = 'SCOLARITE'${anneeFilter}`,
@@ -352,7 +367,8 @@ exports.getRapportClasse = async (req, res) => {
       if (!enseignantId) {
         return res.status(403).json({ message: 'Compte enseignant non lie a un profil enseignant' });
       }
-      const accessResult = await query(
+      const accessResult = await queryScoped(
+        req.ecoleId,
         `SELECT
            EXISTS (
              SELECT 1
@@ -374,7 +390,8 @@ exports.getRapportClasse = async (req, res) => {
     }
 
     // Récupérer la classe avec l'enseignant principal
-    const classeResult = await query(
+    const classeResult = await queryScoped(
+      req.ecoleId,
       `SELECT c.*,
               e.id as enseignant_id, e.nom as enseignant_nom, e.prenom as enseignant_prenom
        FROM classes c
@@ -401,7 +418,8 @@ exports.getRapportClasse = async (req, res) => {
     };
 
     // Récupérer les élèves de la classe
-    const elevesResult = await query(
+    const elevesResult = await queryScoped(
+      req.ecoleId,
       "SELECT * FROM eleves WHERE classe_id = $1 AND statut = 'ACTIF' ORDER BY nom, prenom",
       [classeId]
     );
@@ -445,7 +463,7 @@ exports.getRapportClasse = async (req, res) => {
       paramIndex++;
     }
 
-    const notesResult = await query(notesQuery, notesParams);
+    const notesResult = await queryScoped(req.ecoleId, notesQuery, notesParams);
 
     // Calculer les moyennes par élève
     const moyennesParEleve = {};
@@ -516,7 +534,8 @@ exports.getRapportFinancier = async (req, res) => {
     }
 
     // Récupérer tous les paiements avec les élèves
-    const paiementsResult = await query(
+    const paiementsResult = await queryScoped(
+      req.ecoleId,
       `SELECT p.*,
               e.id as eleve_id, e.nom as eleve_nom, e.prenom as eleve_prenom, e.matricule as eleve_matricule
        FROM paiements p
@@ -548,7 +567,8 @@ exports.getRapportFinancier = async (req, res) => {
     const totalRecettes = paiements.reduce((sum, p) => sum + parseFloat(p.montant), 0);
 
     // Par type de paiement
-    const parTypeResult = await query(
+    const parTypeResult = await queryScoped(
+      req.ecoleId,
       `SELECT type_paiement, SUM(montant) as total, COUNT(*) as count
        FROM paiements p
        ${whereClause}
@@ -563,7 +583,8 @@ exports.getRapportFinancier = async (req, res) => {
     }));
 
     // Par mode de paiement
-    const parModePaiementResult = await query(
+    const parModePaiementResult = await queryScoped(
+      req.ecoleId,
       `SELECT mode_paiement, SUM(montant) as total, COUNT(*) as count
        FROM paiements p
        ${whereClause}
@@ -642,7 +663,7 @@ exports.getRapportNotes = async (req, res) => {
       ORDER BY c.cycle, c.nom
     `;
 
-    const result = await query(sql, params);
+    const result = await queryScoped(req.ecoleId, sql, params);
 
     const classes = result.rows.map(row => ({
       id: row.id,
@@ -695,7 +716,8 @@ exports.getRapportAssiduite = async (req, res) => {
     }
 
     // Récupérer toutes les absences avec les élèves
-    const absencesResult = await query(
+    const absencesResult = await queryScoped(
+      req.ecoleId,
       `SELECT a.*,
               e.id as eleve_id, e.nom as eleve_nom, e.prenom as eleve_prenom, e.matricule as eleve_matricule
        FROM absences a

@@ -15,26 +15,19 @@ router.get('/live', (req, res) => {
 
 router.get('/ready', async (req, res) => {
   try {
+    // Sonde d'infra, sans contexte école (pas de req.ecoleId) : se limite à
+    // la connectivité DB. "1 année active" était un invariant mono-école,
+    // qui n'a plus de sens en multi-école (chaque école a sa propre année
+    // active) et ne peut de toute façon plus être vérifié ici, la table
+    // annees_scolaires étant sous RLS forcée par école.
     await query('SELECT 1 AS ok');
 
-    const activeYear = await query(
-      'SELECT COUNT(*)::INT AS count FROM annees_scolaires WHERE active = true'
-    );
-
-    const activeYearCount = activeYear.rows[0]?.count || 0;
-    const warnings = [];
-
-    if (activeYearCount !== 1) {
-      warnings.push(`Nombre d annees actives inattendu: ${activeYearCount}`);
-    }
-
     res.status(200).json({
-      status: warnings.length > 0 ? 'degraded' : 'ready',
+      status: 'ready',
       checks: {
-        database: 'ok',
-        activeSchoolYearCount: activeYearCount
+        database: 'ok'
       },
-      warnings,
+      warnings: [],
       timestamp: new Date().toISOString()
     });
   } catch (error) {

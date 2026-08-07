@@ -1,5 +1,5 @@
 const PDFDocument = require('pdfkit');
-const { query } = require('../lib/db');
+const { queryScoped } = require('../lib/db');
 const logger = require('../lib/logger');
 
 /**
@@ -15,7 +15,8 @@ exports.generateBulletinPdf = async (req, res) => {
 
   try {
     // ── Données élève ──────────────────────────────────────────────────────
-    const eleveResult = await query(
+    const eleveResult = await queryScoped(
+      req.ecoleId,
       `SELECT e.*, c.nom as classe_nom, c.niveau as classe_niveau, c.cycle as classe_cycle
        FROM eleves e
        LEFT JOIN classes c ON e.classe_id = c.id
@@ -38,7 +39,8 @@ exports.generateBulletinPdf = async (req, res) => {
       notesParams.push(periode);
     }
 
-    const notesResult = await query(
+    const notesResult = await queryScoped(
+      req.ecoleId,
       `SELECT n.note, n.note_max, n.periode, n.type_evaluation,
               m.nom as matiere_nom, m.coefficient as matiere_coeff,
               COALESCE(n.coefficient, m.coefficient, 1) as coeff_effectif

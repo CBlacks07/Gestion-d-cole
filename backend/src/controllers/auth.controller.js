@@ -1,23 +1,16 @@
 const { query } = require('../lib/db');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 const { logAuditEvent } = require('../lib/audit');
 const logger = require('../lib/logger');
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  hashToken,
+  COOKIE_OPTS,
+  storeRefreshToken,
+} = require('../lib/tokens');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const generateAccessToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '15m',
-  });
-
-const REFRESH_TOKEN_DAYS = parseInt(process.env.REFRESH_TOKEN_DAYS || '7', 10);
-
-const generateRefreshToken = () => crypto.randomBytes(64).toString('hex');
-
-const hashToken = (token) =>
-  crypto.createHash('sha256').update(token).digest('hex');
 
 const isStrongPassword = (pwd) => {
   if (!pwd || pwd.length < 8) return false;
@@ -31,14 +24,6 @@ const getAuthSecuritySettings = () => ({
   maxFailedAttempts: parseInt(process.env.LOGIN_MAX_FAILED_ATTEMPTS || '5', 10),
   lockDurationMinutes: parseInt(process.env.LOGIN_LOCK_DURATION_MINUTES || '15', 10),
 });
-
-const COOKIE_OPTS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict',
-  maxAge: REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000,
-  path: '/api/auth/refresh',
-};
 
 // ── Login attempts ─────────────────────────────────────────────────────────────
 
@@ -72,21 +57,6 @@ const clearFailedAttempts = async (email) => {
   await query('DELETE FROM login_attempts WHERE email = $1', [email]);
 };
 
-// ── Sauvegarder un refresh token en DB ────────────────────────────────────────
-
-const storeRefreshToken = async (userId, tokenRaw, req) => {
-  const tokenHash = hashToken(tokenRaw);
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000);
-  const ipAddress = req.ip || null;
-  const userAgent = req.headers['user-agent'] || null;
-
-  await query(
-    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, ip_address, user_agent)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [userId, tokenHash, expiresAt, ipAddress, userAgent]
-  );
-};
-
 // ── Register ───────────────────────────────────────────────────────────────────
 
 exports.register = async (req, res) => {
@@ -118,10 +88,10 @@ exports.register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(motDePasse, salt);
 
     const result = await query(
-      `INSERT INTO users (nom, prenom, email, mot_de_passe, role, telephone, enseignant_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO users (nom, prenom, email, mot_de_passe, role, telephone, enseignant_id, ecole_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id, nom, prenom, email, role, telephone, actif, enseignant_id, created_at`,
-      [nom, prenom, normalizedEmail, hashedPassword, requestedRole, telephone, enseignantId || null]
+      [nom, prenom, normalizedEmail, hashedPassword, requestedRole, telephone, enseignantId || null, req.ecoleId]
     );
 
     const user = result.rows[0];

@@ -1,4 +1,4 @@
-const { query } = require('../lib/db');
+const { queryScoped } = require('../lib/db');
 const { logAuditEvent } = require('../lib/audit');
 
 const normalizeValue = (value) => {
@@ -84,10 +84,10 @@ const isPeriodeCompatibleWithCycle = (periodeCode, cycle) => {
   return true;
 };
 
-const isPeriodeCompatibleWithClasse = async (classeId, periodeCode) => {
+const isPeriodeCompatibleWithClasse = async (ecoleId, classeId, periodeCode) => {
   if (!classeId || !periodeCode) return true;
 
-  const classeResult = await query('SELECT cycle FROM classes WHERE id = $1', [classeId]);
+  const classeResult = await queryScoped(ecoleId, 'SELECT cycle FROM classes WHERE id = $1', [classeId]);
   if (classeResult.rows.length === 0) {
     return false;
   }
@@ -99,10 +99,11 @@ const isEnseignantRole = (req) => normalizeValue(req?.user?.role) === 'ENSEIGNAN
 
 const getEnseignantIdFromUser = (req) => req?.user?.enseignant_id || null;
 
-const canEnseignantManageMatiere = async ({ enseignantId, classeId, matiereId, anneeScolaire }) => {
+const canEnseignantManageMatiere = async ({ ecoleId, enseignantId, classeId, matiereId, anneeScolaire }) => {
   if (!enseignantId || !classeId || !matiereId) return false;
 
-  const permissionResult = await query(
+  const permissionResult = await queryScoped(
+    ecoleId,
     `SELECT
        EXISTS (
          SELECT 1
@@ -379,6 +380,7 @@ exports.createNotesBatch = async (req, res) => {
         const anneeScolaire = data.anneeScolaire || data.annee_scolaire;
         if (isEnseignant) {
           const canManage = await canEnseignantManageMatiere({
+            ecoleId: req.ecoleId,
             enseignantId,
             classeId,
             matiereId,
@@ -395,7 +397,8 @@ exports.createNotesBatch = async (req, res) => {
         let coefficientToSave = parseFloat(data.coefficient);
 
         if (!Number.isFinite(coefficientToSave) || coefficientToSave <= 0) {
-          const coefResult = await query(
+          const coefResult = await queryScoped(
+            req.ecoleId,
             `SELECT cm.coefficient AS cc, m.coefficient AS mc
              FROM matieres m
              LEFT JOIN classe_matieres cm ON cm.matiere_id = m.id AND cm.classe_id = $1 AND cm.annee_scolaire = $2
@@ -407,10 +410,11 @@ exports.createNotesBatch = async (req, res) => {
             : 1;
         }
 
-        const result = await query(
+        const result = await queryScoped(
+          req.ecoleId,
           `INSERT INTO notes (eleve_id, matiere_id, classe_id, enseignant_id, type_evaluation,
-            periode, annee_scolaire, note, note_max, coefficient, commentaire, date_evaluation)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+            periode, annee_scolaire, note, note_max, coefficient, commentaire, date_evaluation, ecole_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
           [
             data.eleveId || data.eleve_id, matiereId, classeId,
             data.enseignantId || data.enseignant_id,
@@ -418,7 +422,8 @@ exports.createNotesBatch = async (req, res) => {
             data.periode, anneeScolaire, data.note,
             data.noteMax || data.note_max || 20,
             coefficientToSave, data.commentaire || null,
-            data.dateEvaluation || data.date_evaluation || new Date()
+            data.dateEvaluation || data.date_evaluation || new Date(),
+            req.ecoleId
           ]
         );
         results.push(result.rows[0]);
@@ -522,7 +527,7 @@ exports.getNotes = async (req, res) => {
 
     sql += ` ORDER BY n.date_evaluation DESC`;
 
-    const result = await query(sql, params);
+    const result = await queryScoped(req.ecoleId, sql, params);
     res.json(result.rows.map(mapNoteRow));
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -533,7 +538,8 @@ exports.getNoteById = async (req, res) => {
   try {
     if (!ensureEnseignantAttached(req, res)) return;
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `SELECT n.*,
               e.id as eleve_id, e.nom as eleve_nom, e.prenom as eleve_prenom, e.matricule as eleve_matricule,
               c.id as classe_ref_id, c.nom as classe_nom, c.niveau as classe_niveau, c.cycle as classe_cycle,
@@ -555,6 +561,7 @@ exports.getNoteById = async (req, res) => {
     if (isEnseignantRole(req)) {
       const row = result.rows[0];
       const canManage = await canEnseignantManageMatiere({
+        ecoleId: req.ecoleId,
         enseignantId: getEnseignantIdFromUser(req),
         classeId: row.classe_id,
         matiereId: row.matiere_id,
@@ -595,6 +602,7 @@ exports.createNote = async (req, res) => {
 
     if (isEnseignant) {
       const canManage = await canEnseignantManageMatiere({
+        ecoleId: req.ecoleId,
         enseignantId,
         classeId,
         matiereId,
@@ -609,14 +617,15 @@ exports.createNote = async (req, res) => {
 
     let coefficientToSave = parseFloat(data.coefficient);
 
-    if (!(await isPeriodeCompatibleWithClasse(classeId, data.periode))) {
+    if (!(await isPeriodeCompatibleWithClasse(req.ecoleId, classeId, data.periode))) {
       return res.status(400).json({
         message: 'Periode incompatible avec le cycle de la classe'
       });
     }
 
     if (!Number.isFinite(coefficientToSave) || coefficientToSave <= 0) {
-      const coefResult = await query(
+      const coefResult = await queryScoped(
+        req.ecoleId,
         `SELECT cm.coefficient AS classe_coefficient, m.coefficient AS matiere_coefficient
          FROM matieres m
          LEFT JOIN classe_matieres cm
@@ -637,11 +646,12 @@ exports.createNote = async (req, res) => {
       }
     }
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `INSERT INTO notes (
         eleve_id, matiere_id, classe_id, enseignant_id, type_evaluation,
-        periode, annee_scolaire, note, note_max, coefficient, commentaire, date_evaluation
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        periode, annee_scolaire, note, note_max, coefficient, commentaire, date_evaluation, ecole_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       [
         data.eleveId || data.eleve_id,
@@ -655,7 +665,8 @@ exports.createNote = async (req, res) => {
         data.noteMax || data.note_max || 20,
         coefficientToSave,
         data.commentaire,
-        data.dateEvaluation || data.date_evaluation || new Date()
+        data.dateEvaluation || data.date_evaluation || new Date(),
+        req.ecoleId
       ]
     );
 
@@ -698,7 +709,8 @@ exports.updateNote = async (req, res) => {
       data.periode = periodeCode;
     }
 
-    const existingResult = await query(
+    const existingResult = await queryScoped(
+      req.ecoleId,
       'SELECT id, classe_id, matiere_id, annee_scolaire, periode FROM notes WHERE id = $1',
       [req.params.id]
     );
@@ -715,6 +727,7 @@ exports.updateNote = async (req, res) => {
 
     if (isEnseignant) {
       const canManage = await canEnseignantManageMatiere({
+        ecoleId: req.ecoleId,
         enseignantId,
         classeId: targetClasseId,
         matiereId: targetMatiereId,
@@ -725,7 +738,7 @@ exports.updateNote = async (req, res) => {
       }
     }
 
-    if (!(await isPeriodeCompatibleWithClasse(targetClasseId, targetPeriode))) {
+    if (!(await isPeriodeCompatibleWithClasse(req.ecoleId, targetClasseId, targetPeriode))) {
       return res.status(400).json({
         message: 'Periode incompatible avec le cycle de la classe'
       });
@@ -783,7 +796,7 @@ exports.updateNote = async (req, res) => {
     values.push(req.params.id);
 
     const sql = `UPDATE notes SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
-    const result = await query(sql, values);
+    const result = await queryScoped(req.ecoleId, sql, values);
 
     await logAuditEvent({
       req,
@@ -809,7 +822,8 @@ exports.deleteNote = async (req, res) => {
     if (!ensureEnseignantAttached(req, res)) return;
 
     if (isEnseignantRole(req)) {
-      const noteCtx = await query(
+      const noteCtx = await queryScoped(
+        req.ecoleId,
         'SELECT classe_id, matiere_id, annee_scolaire FROM notes WHERE id = $1',
         [req.params.id]
       );
@@ -817,6 +831,7 @@ exports.deleteNote = async (req, res) => {
         return res.status(404).json({ message: 'Note non trouvee' });
       }
       const canManage = await canEnseignantManageMatiere({
+        ecoleId: req.ecoleId,
         enseignantId: getEnseignantIdFromUser(req),
         classeId: noteCtx.rows[0].classe_id,
         matiereId: noteCtx.rows[0].matiere_id,
@@ -827,7 +842,7 @@ exports.deleteNote = async (req, res) => {
       }
     }
 
-    const result = await query('DELETE FROM notes WHERE id = $1 RETURNING id', [req.params.id]);
+    const result = await queryScoped(req.ecoleId, 'DELETE FROM notes WHERE id = $1 RETURNING id', [req.params.id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Note non trouvee' });
@@ -868,7 +883,8 @@ exports.getBulletin = async (req, res) => {
       return res.status(400).json({ message: 'Annee scolaire requise' });
     }
 
-    const eleveResult = await query(
+    const eleveResult = await queryScoped(
+      req.ecoleId,
       `SELECT e.*,
               c.id as classe_id, c.nom as classe_nom, c.niveau as classe_niveau, c.cycle as classe_cycle
        FROM eleves e
@@ -902,14 +918,16 @@ exports.getBulletin = async (req, res) => {
     const classeId = eleveRow.classe_id;
 
     const [elevesClasseResult, classeMatieresResult, notesClasseResult] = await Promise.all([
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT id, nom, prenom
          FROM eleves
          WHERE classe_id = $1 AND statut = 'ACTIF'
          ORDER BY nom, prenom`,
         [classeId]
       ),
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT
            cm.matiere_id,
            cm.coefficient AS classe_coefficient,
@@ -925,7 +943,8 @@ exports.getBulletin = async (req, res) => {
          ORDER BY m.nom`,
         [classeId, anneeScolaire]
       ),
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT n.id, n.eleve_id, n.matiere_id, n.type_evaluation, n.note, n.note_max, n.coefficient, n.date_evaluation
          FROM notes n
          WHERE n.classe_id = $1 AND n.annee_scolaire = $2 AND n.periode = $3
@@ -936,7 +955,8 @@ exports.getBulletin = async (req, res) => {
 
     let matieresClasse = classeMatieresResult.rows;
     if (matieresClasse.length === 0) {
-      const matieresFallbackResult = await query(
+      const matieresFallbackResult = await queryScoped(
+        req.ecoleId,
         `SELECT DISTINCT
            n.matiere_id,
            NULL::numeric AS classe_coefficient,
@@ -1055,7 +1075,8 @@ exports.getBulletin = async (req, res) => {
     const periodeRange = getPeriodeRange(anneeScolaire, periodeCode);
     let absencesResult;
     if (periodeRange) {
-      absencesResult = await query(
+      absencesResult = await queryScoped(
+        req.ecoleId,
         `SELECT
            COUNT(*)::int AS total,
            SUM(CASE WHEN justifiee THEN 1 ELSE 0 END)::int AS justifiees
@@ -1066,7 +1087,8 @@ exports.getBulletin = async (req, res) => {
         [eleveId, anneeScolaire, periodeRange.from, periodeRange.to]
       );
     } else {
-      absencesResult = await query(
+      absencesResult = await queryScoped(
+        req.ecoleId,
         `SELECT
            COUNT(*)::int AS total,
            SUM(CASE WHEN justifiee THEN 1 ELSE 0 END)::int AS justifiees

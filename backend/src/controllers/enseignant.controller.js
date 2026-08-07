@@ -1,4 +1,4 @@
-const { query } = require('../lib/db');
+const { queryScoped } = require('../lib/db');
 const { logAuditEvent } = require('../lib/audit');
 const { parsePagination, paginatedResponse } = require('../lib/pagination');
 const logger = require('../lib/logger');
@@ -25,7 +25,8 @@ exports.getEnseignants = async (req, res) => {
     }
 
     // Compter le total (avant pagination)
-    const countResult = await query(
+    const countResult = await queryScoped(
+      req.ecoleId,
       `SELECT COUNT(*) as total FROM enseignants e ${where}`,
       params
     );
@@ -57,7 +58,7 @@ exports.getEnseignants = async (req, res) => {
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
 
-    const result = await query(sql, [...params, limit, offset]);
+    const result = await queryScoped(req.ecoleId, sql, [...params, limit, offset]);
 
     const enseignants = result.rows.map(row => ({
       ...row,
@@ -73,7 +74,8 @@ exports.getEnseignants = async (req, res) => {
 
 exports.getEnseignantById = async (req, res) => {
   try {
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       'SELECT * FROM enseignants WHERE id = $1',
       [req.params.id]
     );
@@ -85,7 +87,8 @@ exports.getEnseignantById = async (req, res) => {
     const enseignant = result.rows[0];
 
     // Récupérer les spécialités (matières)
-    const specialitesResult = await query(
+    const specialitesResult = await queryScoped(
+      req.ecoleId,
       `SELECT em.id, em.matiere_id, m.nom, m.code, m.coefficient
        FROM enseignant_matieres em
        JOIN matieres m ON em.matiere_id = m.id
@@ -105,7 +108,8 @@ exports.getEnseignantById = async (req, res) => {
     }));
 
     // Récupérer les classes dont il est responsable
-    const classesResult = await query(
+    const classesResult = await queryScoped(
+      req.ecoleId,
       'SELECT id, nom, niveau, cycle FROM classes WHERE enseignant_principal_id = $1',
       [enseignant.id]
     );
@@ -133,16 +137,17 @@ exports.createEnseignant = async (req, res) => {
     let matricule = data.matricule;
     if (!matricule) {
       const year = new Date().getFullYear();
-      const countResult = await query('SELECT COUNT(*) as count FROM enseignants');
+      const countResult = await queryScoped(req.ecoleId, 'SELECT COUNT(*) as count FROM enseignants');
       const count = parseInt(countResult.rows[0].count) + 1;
       matricule = `EN${year}${count.toString().padStart(3, '0')}`;
     }
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `INSERT INTO enseignants (
         matricule, nom, prenom, date_naissance, sexe, telephone, email, adresse,
-        diplomes, date_recrutement, statut, type_contrat, salaire
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        diplomes, date_recrutement, statut, type_contrat, salaire, ecole_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
       [
         matricule,
@@ -157,17 +162,19 @@ exports.createEnseignant = async (req, res) => {
         data.dateRecrutement || data.date_recrutement || new Date(),
         data.statut || 'ACTIF',
         data.typeContrat || data.type_contrat || 'PERMANENT',
-        data.salaire || null
+        data.salaire || null,
+        req.ecoleId
       ]
     );
 
     const enseignantId = result.rows[0].id;
 
     if (Array.isArray(data.specialiteIds) && data.specialiteIds.length > 0) {
-      const insertValues = data.specialiteIds.map((_, i) => `($1, $${i + 2})`).join(', ');
-      await query(
-        `INSERT INTO enseignant_matieres (enseignant_id, matiere_id) VALUES ${insertValues} ON CONFLICT DO NOTHING`,
-        [enseignantId, ...data.specialiteIds]
+      const insertValues = data.specialiteIds.map((_, i) => `($1, $${i + 2}, $${data.specialiteIds.length + 2})`).join(', ');
+      await queryScoped(
+        req.ecoleId,
+        `INSERT INTO enseignant_matieres (enseignant_id, matiere_id, ecole_id) VALUES ${insertValues} ON CONFLICT DO NOTHING`,
+        [enseignantId, ...data.specialiteIds, req.ecoleId]
       );
     }
 
@@ -247,19 +254,20 @@ exports.updateEnseignant = async (req, res) => {
     values.push(req.params.id);
 
     const sql = `UPDATE enseignants SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
-    const result = await query(sql, values);
+    const result = await queryScoped(req.ecoleId, sql, values);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Enseignant non trouvé' });
     }
 
     if (Array.isArray(data.specialiteIds)) {
-      await query('DELETE FROM enseignant_matieres WHERE enseignant_id = $1', [req.params.id]);
+      await queryScoped(req.ecoleId, 'DELETE FROM enseignant_matieres WHERE enseignant_id = $1', [req.params.id]);
       if (data.specialiteIds.length > 0) {
-        const insertValues = data.specialiteIds.map((_, i) => `($1, $${i + 2})`).join(', ');
-        await query(
-          `INSERT INTO enseignant_matieres (enseignant_id, matiere_id) VALUES ${insertValues} ON CONFLICT DO NOTHING`,
-          [req.params.id, ...data.specialiteIds]
+        const insertValues = data.specialiteIds.map((_, i) => `($1, $${i + 2}, $${data.specialiteIds.length + 2})`).join(', ');
+        await queryScoped(
+          req.ecoleId,
+          `INSERT INTO enseignant_matieres (enseignant_id, matiere_id, ecole_id) VALUES ${insertValues} ON CONFLICT DO NOTHING`,
+          [req.params.id, ...data.specialiteIds, req.ecoleId]
         );
       }
     }
@@ -284,7 +292,8 @@ exports.updateEnseignant = async (req, res) => {
 
 exports.deleteEnseignant = async (req, res) => {
   try {
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       'DELETE FROM enseignants WHERE id = $1 RETURNING id, nom, prenom',
       [req.params.id]
     );

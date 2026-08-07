@@ -1,4 +1,4 @@
-const { query } = require('../lib/db');
+const { queryScoped } = require('../lib/db');
 const { logAuditEvent } = require('../lib/audit');
 const { parsePagination, paginatedResponse } = require('../lib/pagination');
 const logger = require('../lib/logger');
@@ -80,9 +80,9 @@ const getFinanceTotalsV2 = ({ montantScolarite, montantInscription, montantMensu
   return getFinanceTotals({ montantInscription, montantMensuel, monthsDue, totalPaye });
 };
 
-const getEffectiveAnnee = async (preferredAnnee) => {
+const getEffectiveAnnee = async (ecoleId, preferredAnnee) => {
   if (preferredAnnee) return preferredAnnee;
-  const anneeActiveResult = await query('SELECT annee FROM annees_scolaires WHERE active = true LIMIT 1');
+  const anneeActiveResult = await queryScoped(ecoleId, 'SELECT annee FROM annees_scolaires WHERE active = true LIMIT 1');
   if (anneeActiveResult.rows.length > 0) return anneeActiveResult.rows[0].annee;
   return null;
 };
@@ -120,7 +120,8 @@ exports.getPaiements = async (req, res) => {
       paramIndex++;
     }
 
-    const countResult = await query(
+    const countResult = await queryScoped(
+      req.ecoleId,
       `SELECT COUNT(*) as total FROM paiements p ${where}`,
       params
     );
@@ -138,7 +139,7 @@ exports.getPaiements = async (req, res) => {
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
 
-    const result = await query(sql, [...params, limit, offset]);
+    const result = await queryScoped(req.ecoleId, sql, [...params, limit, offset]);
     const paiements = result.rows.map((row) => ({
       id: row.id,
       eleve_id: row.eleve_id,
@@ -179,7 +180,8 @@ exports.getPaiements = async (req, res) => {
 
 exports.getPaiementById = async (req, res) => {
   try {
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `SELECT p.*,
               e.id as eleve_id, e.nom as eleve_nom, e.prenom as eleve_prenom, e.matricule as eleve_matricule,
               u.id as user_id, u.nom as user_nom, u.prenom as user_prenom
@@ -249,18 +251,19 @@ exports.createPaiement = async (req, res) => {
 
     let anneeScolaire = data.anneeScolaire || data.annee_scolaire;
     if (!anneeScolaire) {
-      anneeScolaire = await getEffectiveAnnee(null);
+      anneeScolaire = await getEffectiveAnnee(req.ecoleId, null);
       if (!anneeScolaire) {
         const year = new Date().getFullYear();
         anneeScolaire = `${year}-${year + 1}`;
       }
     }
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `INSERT INTO paiements (
         eleve_id, type_paiement, montant, devise, date_paiement, mois_concerne,
-        annee_scolaire, mode_paiement, numero_piece, statut, remarques, enregistre_par_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        annee_scolaire, mode_paiement, numero_piece, statut, remarques, enregistre_par_id, ecole_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       [
         data.eleveId || data.eleve_id,
@@ -274,11 +277,13 @@ exports.createPaiement = async (req, res) => {
         data.numeroPiece || data.numero_piece || null,
         data.statut || 'VALIDE',
         data.remarques || null,
-        data.enregistreParId || data.enregistre_par_id
+        data.enregistreParId || data.enregistre_par_id,
+        req.ecoleId
       ]
     );
 
-    const paiementWithEleve = await query(
+    const paiementWithEleve = await queryScoped(
+      req.ecoleId,
       `SELECT p.*,
               e.id as eleve_id, e.nom as eleve_nom, e.prenom as eleve_prenom
        FROM paiements p
@@ -373,7 +378,7 @@ exports.updatePaiement = async (req, res) => {
     values.push(req.params.id);
 
     const sql = `UPDATE paiements SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
-    const result = await query(sql, values);
+    const result = await queryScoped(req.ecoleId, sql, values);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Paiement non trouve' });
@@ -400,7 +405,7 @@ exports.updatePaiement = async (req, res) => {
 
 exports.deletePaiement = async (req, res) => {
   try {
-    const result = await query('DELETE FROM paiements WHERE id = $1 RETURNING id', [req.params.id]);
+    const result = await queryScoped(req.ecoleId, 'DELETE FROM paiements WHERE id = $1 RETURNING id', [req.params.id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Paiement non trouve' });
@@ -426,9 +431,10 @@ exports.getHistoriquePaiements = async (req, res) => {
     const { eleveId } = req.params;
     const { anneeScolaire } = req.query;
 
-    let effectiveAnnee = await getEffectiveAnnee(anneeScolaire);
+    let effectiveAnnee = await getEffectiveAnnee(req.ecoleId, anneeScolaire);
 
-    const eleveResult = await query(
+    const eleveResult = await queryScoped(
+      req.ecoleId,
       `SELECT e.id, e.date_inscription, e.annee_scolaire,
               c.id as classe_id, c.nom as classe_nom,
               c.montant_scolarite, c.montant_inscription, c.montant_mensuel, c.devise
@@ -454,7 +460,7 @@ exports.getHistoriquePaiements = async (req, res) => {
     }
 
     sql += ' ORDER BY date_paiement DESC';
-    const result = await query(sql, params);
+    const result = await queryScoped(req.ecoleId, sql, params);
 
     const totalPaye = result.rows
       .filter(p => p.statut === 'VALIDE' && p.type_paiement === 'SCOLARITE')
@@ -491,9 +497,10 @@ exports.getSoldeEleve = async (req, res) => {
   try {
     const { eleveId } = req.params;
     const { anneeScolaire } = req.query;
-    let effectiveAnnee = await getEffectiveAnnee(anneeScolaire);
+    let effectiveAnnee = await getEffectiveAnnee(req.ecoleId, anneeScolaire);
 
-    const eleveResult = await query(
+    const eleveResult = await queryScoped(
+      req.ecoleId,
       `SELECT e.id, e.date_inscription, e.annee_scolaire,
               c.montant_scolarite, c.montant_inscription, c.montant_mensuel, c.devise
        FROM eleves e
@@ -509,7 +516,8 @@ exports.getSoldeEleve = async (req, res) => {
     const eleveInfo = eleveResult.rows[0];
     if (!effectiveAnnee) effectiveAnnee = eleveInfo.annee_scolaire;
 
-    const totalResult = await query(
+    const totalResult = await queryScoped(
+      req.ecoleId,
       `SELECT COALESCE(SUM(montant), 0) as total
        FROM paiements
        WHERE eleve_id = $1
@@ -549,7 +557,7 @@ exports.getSoldeEleve = async (req, res) => {
 exports.getElevesImpayes = async (req, res) => {
   try {
     const { anneeScolaire, classeId } = req.query;
-    const effectiveAnnee = await getEffectiveAnnee(anneeScolaire);
+    const effectiveAnnee = await getEffectiveAnnee(req.ecoleId, anneeScolaire);
 
     if (!effectiveAnnee) {
       return res.status(400).json({ message: 'Annee scolaire requise' });
@@ -564,7 +572,8 @@ exports.getElevesImpayes = async (req, res) => {
       params.push(classeId);
     }
 
-    const studentsResult = await query(
+    const studentsResult = await queryScoped(
+      req.ecoleId,
       `SELECT e.id, e.matricule, e.nom, e.prenom,
               c.id as classe_id, c.nom as classe_nom,
               c.montant_scolarite, c.devise,
@@ -630,17 +639,20 @@ exports.getPaiementStats = async (req, res) => {
       params.push(anneeScolaire);
     }
 
-    const totalResult = await query(
+    const totalResult = await queryScoped(
+      req.ecoleId,
       `SELECT COUNT(*) as count FROM paiements ${whereClause}`,
       params
     );
 
-    const montantResult = await query(
+    const montantResult = await queryScoped(
+      req.ecoleId,
       `SELECT SUM(montant) as total FROM paiements ${whereClause}`,
       params
     );
 
-    const parTypeResult = await query(
+    const parTypeResult = await queryScoped(
+      req.ecoleId,
       `SELECT type_paiement, SUM(montant) as total, COUNT(*) as count
        FROM paiements ${whereClause}
        GROUP BY type_paiement`,

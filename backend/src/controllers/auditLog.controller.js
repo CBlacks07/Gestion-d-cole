@@ -13,9 +13,12 @@ exports.getAuditLogs = async (req, res) => {
     const offset = (page - 1) * limit;
     const { action, userId, dateFrom, dateTo } = req.query;
 
-    const conditions = [];
-    const values = [];
-    let idx = 1;
+    // audit_logs n'est pas sous RLS forcée (ecole_id nullable pour les
+    // actions plateforme) : filtre explicite requis ici, voir
+    // migration_multi_ecole.sql.
+    const conditions = ['(al.ecole_id = $1)'];
+    const values = [req.ecoleId];
+    let idx = 2;
 
     if (action) { conditions.push(`al.action = $${idx++}`); values.push(action.toUpperCase()); }
     if (userId) { conditions.push(`al.user_id = $${idx++}`); values.push(userId); }
@@ -58,7 +61,8 @@ exports.getAuditLogs = async (req, res) => {
 exports.getAuditActions = async (req, res) => {
   try {
     const result = await query(
-      `SELECT DISTINCT action FROM audit_logs ORDER BY action`
+      `SELECT DISTINCT action FROM audit_logs WHERE ecole_id = $1 ORDER BY action`,
+      [req.ecoleId]
     );
     res.json(result.rows.map(r => r.action));
   } catch (error) {

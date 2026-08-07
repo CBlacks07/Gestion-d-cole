@@ -16,11 +16,12 @@ const logAuditEvent = async ({
   try {
     const ipAddress = req ? getClientIp(req) : null;
     const userAgent = req?.headers?.['user-agent'] || null;
+    const ecoleId = req?.ecoleId || null;
 
     await query(
       `INSERT INTO audit_logs
-       (user_id, action, entity, entity_id, status, details, ip_address, user_agent)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       (user_id, action, entity, entity_id, status, details, ip_address, user_agent, ecole_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         userId,
         action,
@@ -29,7 +30,8 @@ const logAuditEvent = async ({
         status,
         details ? JSON.stringify(details) : null,
         ipAddress,
-        userAgent
+        userAgent,
+        ecoleId
       ]
     );
   } catch (error) {

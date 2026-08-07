@@ -11,9 +11,12 @@
     "db:migrate:reliability": "psql -U gestion_user -d Ecole -f database/migration_data_reliability.sql",
     "db:migrate:semesters": "node scripts/migrate-semester-periods.js",
     "db:migrate:refresh-tokens": "psql -U gestion_user -d Ecole -f database/migration_refresh_tokens.sql",
+    "db:migrate:multi-ecole": "psql -U gestion_user -d Ecole -f database/migration_multi_ecole.sql",
     "create-admin": "node scripts/create-admin.js"
   },
   "dependencies": {
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.2",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

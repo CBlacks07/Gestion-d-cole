@@ -1,4 +1,4 @@
-const { query } = require('../lib/db');
+const { queryScoped } = require('../lib/db');
 const { logAuditEvent } = require('../lib/audit');
 const logger = require('../lib/logger');
 
@@ -40,7 +40,7 @@ exports.getMatieres = async (req, res) => {
 
     sql += ' ORDER BY nom ASC';
 
-    const result = await query(sql, params);
+    const result = await queryScoped(req.ecoleId, sql, params);
     res.json(result.rows);
   } catch (error) {
     logger.error('Erreur lors de la recuperation des matieres:', error);
@@ -52,7 +52,8 @@ exports.getMatieres = async (req, res) => {
 // @route   GET /api/matieres/:id
 exports.getMatiereById = async (req, res) => {
   try {
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `SELECT
          id,
          nom,
@@ -90,9 +91,10 @@ exports.createMatiere = async (req, res) => {
       return res.status(400).json({ message: 'Le nom et le code sont obligatoires' });
     }
 
-    const result = await query(
-      `INSERT INTO matieres (nom, code, description, coefficient, niveaux, cycles, couleur)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+    const result = await queryScoped(
+      req.ecoleId,
+      `INSERT INTO matieres (nom, code, description, coefficient, niveaux, cycles, couleur, ecole_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING
          id,
          nom,
@@ -111,7 +113,8 @@ exports.createMatiere = async (req, res) => {
         coefficient || 1,
         niveaux || [],
         cycles || [],
-        couleur || '#3B82F6'
+        couleur || '#3B82F6',
+        req.ecoleId
       ]
     );
 
@@ -145,7 +148,8 @@ exports.updateMatiere = async (req, res) => {
   try {
     const { nom, code, description, coefficient, niveaux, cycles, couleur } = req.body;
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `UPDATE matieres
        SET nom = $1, code = $2, description = $3, coefficient = $4,
            niveaux = $5, cycles = $6, couleur = $7, updated_at = NOW()
@@ -196,7 +200,8 @@ exports.updateMatiere = async (req, res) => {
 // @route   DELETE /api/matieres/:id
 exports.deleteMatiere = async (req, res) => {
   try {
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       'DELETE FROM matieres WHERE id = $1 RETURNING id, nom, code',
       [req.params.id]
     );

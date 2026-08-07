@@ -1,4 +1,4 @@
-const { query } = require('../lib/db');
+const { queryScoped } = require('../lib/db');
 const logger = require('../lib/logger');
 
 const normalizeRole = (value) =>
@@ -24,7 +24,8 @@ exports.globalSearch = async (req, res) => {
         return res.status(403).json({ message: 'Compte enseignant non lie a un profil enseignant' });
       }
 
-      const classesResult = await query(
+      const classesResult = await queryScoped(
+        req.ecoleId,
         `SELECT DISTINCT c.id, c.nom, c.cycle::text AS cycle, c.niveau::text AS niveau, c.annee_scolaire
          FROM classes c
          LEFT JOIN classe_matieres cm
@@ -45,7 +46,8 @@ exports.globalSearch = async (req, res) => {
     }
 
     const [elevesResult, classesResult, enseignantsResult] = await Promise.all([
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT e.id, e.nom, e.prenom, e.matricule, c.nom as classe_nom
          FROM eleves e
          LEFT JOIN classes c ON c.id = e.classe_id
@@ -55,7 +57,8 @@ exports.globalSearch = async (req, res) => {
          LIMIT 5`,
         [term]
       ),
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT id, nom, cycle::text AS cycle, niveau::text AS niveau, annee_scolaire
          FROM classes
          WHERE LOWER(nom) LIKE LOWER($1) OR LOWER(cycle::text) LIKE LOWER($1) OR LOWER(niveau::text) LIKE LOWER($1)
@@ -63,7 +66,8 @@ exports.globalSearch = async (req, res) => {
          LIMIT 5`,
         [term]
       ),
-      query(
+      queryScoped(
+        req.ecoleId,
         `SELECT id, nom, prenom, telephone, type_contrat::text AS type_contrat
          FROM enseignants
          WHERE statut::text = 'ACTIF'

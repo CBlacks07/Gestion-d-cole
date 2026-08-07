@@ -1,4 +1,4 @@
-const { query } = require('../lib/db');
+const { queryScoped } = require('../lib/db');
 const { logAuditEvent } = require('../lib/audit');
 
 exports.getClasses = async (req, res) => {
@@ -44,7 +44,7 @@ exports.getClasses = async (req, res) => {
 
     sql += ` ORDER BY c.cycle ASC, c.niveau ASC`;
 
-    const result = await query(sql, params);
+    const result = await queryScoped(req.ecoleId, sql, params);
 
     const classesWithEffectif = result.rows.map((row) => {
       const classe = {
@@ -93,7 +93,8 @@ exports.getClasseById = async (req, res) => {
       return res.status(403).json({ message: 'Compte enseignant non lie a un profil enseignant' });
     }
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `SELECT c.*,
               e.id as enseignant_id, e.nom as enseignant_nom, e.prenom as enseignant_prenom,
               e.matricule as enseignant_matricule
@@ -110,7 +111,8 @@ exports.getClasseById = async (req, res) => {
     const row = result.rows[0];
 
     if (isEnseignant) {
-      const accessResult = await query(
+      const accessResult = await queryScoped(
+        req.ecoleId,
         `SELECT
            EXISTS (
              SELECT 1
@@ -132,7 +134,8 @@ exports.getClasseById = async (req, res) => {
       }
     }
 
-    const elevesResult = await query(
+    const elevesResult = await queryScoped(
+      req.ecoleId,
       'SELECT * FROM eleves WHERE classe_id = $1 AND statut = $2 ORDER BY nom, prenom',
       [row.id, 'ACTIF']
     );
@@ -180,11 +183,12 @@ exports.createClasse = async (req, res) => {
     if (data.cycle) data.cycle = data.cycle.toUpperCase();
     if (data.niveau) data.niveau = data.niveau.toUpperCase();
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `INSERT INTO classes (
         nom, niveau, cycle, section, annee_scolaire, enseignant_principal_id,
-        effectif_max, salle, montant_inscription, montant_mensuel, montant_scolarite, devise
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        effectif_max, salle, montant_inscription, montant_mensuel, montant_scolarite, devise, ecole_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       [
         data.nom,
@@ -198,7 +202,8 @@ exports.createClasse = async (req, res) => {
         data.montantInscription || data.montant_inscription || 0,
         data.montantMensuel || data.montant_mensuel || 0,
         data.montantScolarite || data.montant_scolarite || 0,
-        data.devise || 'XOF'
+        data.devise || 'XOF',
+        req.ecoleId
       ]
     );
 
@@ -273,7 +278,7 @@ exports.updateClasse = async (req, res) => {
     values.push(req.params.id);
 
     const sql = `UPDATE classes SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
-    const result = await query(sql, values);
+    const result = await queryScoped(req.ecoleId, sql, values);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Classe non trouvée' });
@@ -299,7 +304,8 @@ exports.updateClasse = async (req, res) => {
 
 exports.deleteClasse = async (req, res) => {
   try {
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       'DELETE FROM classes WHERE id = $1 RETURNING id, nom',
       [req.params.id]
     );

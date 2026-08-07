@@ -10,10 +10,15 @@ const safeError = (error) =>
 // @route   GET /api/users
 exports.getUsers = async (req, res) => {
   try {
+    // `users` n'est pas sous RLS (le login doit pouvoir chercher un
+    // utilisateur avant de connaître son ecole_id) : le filtre par école
+    // doit donc être explicite ici, voir migration_multi_ecole.sql.
     const result = await query(
       `SELECT id, nom, prenom, email, role, telephone, actif, enseignant_id, created_at
        FROM users
-       ORDER BY created_at DESC`
+       WHERE ecole_id = $1
+       ORDER BY created_at DESC`,
+      [req.ecoleId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -44,7 +49,7 @@ exports.updateUser = async (req, res) => {
       return res.status(403).json({ message: 'Seul un ADMIN peut réinitialiser le mot de passe d\'un utilisateur' });
     }
 
-    const existing = await query('SELECT id, role, email FROM users WHERE id = $1', [id]);
+    const existing = await query('SELECT id, role, email FROM users WHERE id = $1 AND ecole_id = $2', [id, req.ecoleId]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ message: 'Utilisateur non trouvé' });
     }
@@ -83,10 +88,10 @@ exports.updateUser = async (req, res) => {
       return res.status(400).json({ message: 'Aucune donnée à mettre à jour' });
     }
 
-    values.push(id);
+    values.push(id, req.ecoleId);
     const result = await query(
       `UPDATE users SET ${updates.join(', ')}
-       WHERE id = $${idx}
+       WHERE id = $${idx} AND ecole_id = $${idx + 1}
        RETURNING id, nom, prenom, email, role, telephone, actif, enseignant_id, created_at`,
       values
     );
@@ -118,12 +123,12 @@ exports.deleteUser = async (req, res) => {
       return res.status(400).json({ message: 'Vous ne pouvez pas supprimer votre propre compte' });
     }
 
-    const existing = await query('SELECT id, email, role FROM users WHERE id = $1', [id]);
+    const existing = await query('SELECT id, email, role FROM users WHERE id = $1 AND ecole_id = $2', [id, req.ecoleId]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ message: 'Utilisateur non trouvé' });
     }
 
-    await query('DELETE FROM users WHERE id = $1', [id]);
+    await query('DELETE FROM users WHERE id = $1 AND ecole_id = $2', [id, req.ecoleId]);
 
     await logAuditEvent({
       req,

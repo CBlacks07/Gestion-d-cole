@@ -1,4 +1,4 @@
-const { query } = require('../lib/db');
+const { queryScoped } = require('../lib/db');
 const logger = require('../lib/logger');
 
 // Récupérer les matières d'une classe
@@ -7,7 +7,8 @@ exports.getMatieresClasse = async (req, res) => {
     const { classeId } = req.params;
     const { annee_scolaire } = req.query;
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `SELECT cm.*, m.nom, m.code, m.couleur, m.description,
               e.nom as enseignant_nom, e.prenom as enseignant_prenom
        FROM classe_matieres cm
@@ -42,7 +43,8 @@ exports.addMatiereToClasse = async (req, res) => {
       return res.status(400).json({ message: 'classe_id, matiere_id et annee_scolaire sont obligatoires' });
     }
 
-    const compatibilityResult = await query(
+    const compatibilityResult = await queryScoped(
+      req.ecoleId,
       `SELECT
          c.cycle::text AS classe_cycle,
          c.niveau::text AS classe_niveau,
@@ -82,11 +84,12 @@ exports.addMatiereToClasse = async (req, res) => {
       });
     }
 
-    const result = await query(
-      `INSERT INTO classe_matieres (classe_id, matiere_id, coefficient, enseignant_id, annee_scolaire)
-       VALUES ($1, $2, $3, $4, $5)
+    const result = await queryScoped(
+      req.ecoleId,
+      `INSERT INTO classe_matieres (classe_id, matiere_id, coefficient, enseignant_id, annee_scolaire, ecole_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [classe_id, matiere_id, resolvedCoefficient, enseignant_id || null, annee_scolaire]
+      [classe_id, matiere_id, resolvedCoefficient, enseignant_id || null, annee_scolaire, req.ecoleId]
     );
 
     res.status(201).json(result.rows[0]);
@@ -105,7 +108,8 @@ exports.updateMatiereClasse = async (req, res) => {
     const { id } = req.params;
     const { enseignant_id, coefficient } = req.body;
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `UPDATE classe_matieres
        SET enseignant_id = $1, coefficient = $2, updated_at = NOW()
        WHERE id = $3
@@ -129,7 +133,8 @@ exports.removeMatiereFromClasse = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `DELETE FROM classe_matieres WHERE id = $1 RETURNING *`,
       [id]
     );

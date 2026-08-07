@@ -4,9 +4,17 @@ const fs = require('fs');
 
 const isDev = process.env.NODE_ENV !== 'production';
 
-// Créer le répertoire de logs si nécessaire
+// Sur Vercel (et toute plateforme serverless équivalente), le système de
+// fichiers est en lecture seule hors /tmp (éphémère, effacé entre chaque
+// invocation) : écrire des logs sur disque n'a aucun sens et
+// `fs.mkdirSync` y échouerait au démarrage (EROFS), plantant la fonction.
+// Vercel capture déjà stdout/stderr dans ses propres logs — on se limite
+// donc à la console dans ce contexte.
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+// Créer le répertoire de logs si nécessaire (hors serverless uniquement)
 const logDir = process.env.LOG_DIR || path.join(__dirname, '../../../logs');
-if (!fs.existsSync(logDir)) {
+if (!isServerless && !fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
 }
 
@@ -37,23 +45,27 @@ const logger = createLogger({
   format: isDev ? devFormat : prodFormat,
   transports: [
     new transports.Console(),
-    // Fichier erreurs uniquement
-    new transports.File({
-      filename: path.join(logDir, 'error.log'),
-      level: 'error',
-      maxsize: 10 * 1024 * 1024, // 10 MB
-      maxFiles: 5,
-      tailable: true,
-    }),
-    // Fichier toutes les logs (hors dev)
-    ...(!isDev
+    // Fichiers locaux (error.log / combined.log) : uniquement hors
+    // serverless, où le disque est persistant (Docker/VM classique).
+    ...(!isServerless
       ? [
           new transports.File({
-            filename: path.join(logDir, 'combined.log'),
-            maxsize: 20 * 1024 * 1024, // 20 MB
-            maxFiles: 10,
+            filename: path.join(logDir, 'error.log'),
+            level: 'error',
+            maxsize: 10 * 1024 * 1024, // 10 MB
+            maxFiles: 5,
             tailable: true,
           }),
+          ...(!isDev
+            ? [
+                new transports.File({
+                  filename: path.join(logDir, 'combined.log'),
+                  maxsize: 20 * 1024 * 1024, // 20 MB
+                  maxFiles: 10,
+                  tailable: true,
+                }),
+              ]
+            : []),
         ]
       : []),
   ],

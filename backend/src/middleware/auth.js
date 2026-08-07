@@ -16,7 +16,7 @@ exports.protect = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const result = await query(
-      'SELECT id, nom, prenom, email, role, telephone, actif, enseignant_id, password_changed_at FROM users WHERE id = $1',
+      'SELECT id, nom, prenom, email, role, telephone, actif, enseignant_id, ecole_id, password_changed_at FROM users WHERE id = $1',
       [decoded.id]
     );
 
@@ -34,7 +34,14 @@ exports.protect = async (req, res, next) => {
       }
     }
 
+    // SUPER_ADMIN n'est rattaché à aucune école (ecole_id NULL) ; tous les
+    // autres rôles doivent appartenir à une école pour accéder aux données.
+    if (!user.ecole_id && user.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ message: 'Utilisateur non rattaché à une école' });
+    }
+
     req.user = user;
+    req.ecoleId = user.ecole_id;
 
     next();
   } catch (error) {

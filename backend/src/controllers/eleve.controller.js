@@ -1,4 +1,4 @@
-const { query } = require('../lib/db');
+const { queryScoped } = require('../lib/db');
 const { parsePagination, paginatedResponse } = require('../lib/pagination');
 const logger = require('../lib/logger');
 
@@ -88,19 +88,20 @@ exports.getEleves = async (req, res) => {
     let total;
     if (!noPagination) {
       const { page, limit, offset } = parsePagination(req.query);
-      const countResult = await query(
+      const countResult = await queryScoped(
+        req.ecoleId,
         `SELECT COUNT(*) as total FROM eleves e ${where}`,
         params
       );
       total = parseInt(countResult.rows[0].total, 10);
 
       sql += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-      const result = await query(sql, [...params, limit, offset]);
+      const result = await queryScoped(req.ecoleId, sql, [...params, limit, offset]);
       const eleves = formatEleves(result.rows);
       return res.json(paginatedResponse(eleves, total, page, limit));
     }
 
-    const result = await query(sql, params);
+    const result = await queryScoped(req.ecoleId, sql, params);
     const eleves = formatEleves(result.rows);
     res.json(eleves);
   } catch (error) {
@@ -112,7 +113,8 @@ exports.getEleves = async (req, res) => {
 // @route   GET /api/eleves/:id
 exports.getEleveById = async (req, res) => {
   try {
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `SELECT e.*,
               c.id as classe_id, c.nom as classe_nom, c.niveau as classe_niveau,
               c.cycle as classe_cycle, c.section as classe_section
@@ -189,7 +191,8 @@ exports.createEleve = async (req, res) => {
     if (!matricule) {
       const currentYear = new Date().getFullYear();
       // Trouver le dernier matricule de l'année en cours
-      const lastMatriculeResult = await query(
+      const lastMatriculeResult = await queryScoped(
+        req.ecoleId,
         `SELECT matricule FROM eleves
          WHERE matricule LIKE $1
          ORDER BY matricule DESC
@@ -208,13 +211,14 @@ exports.createEleve = async (req, res) => {
       matricule = `EL${currentYear}${nextNumber.toString().padStart(3, '0')}`;
     }
 
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       `INSERT INTO eleves (
         matricule, nom, prenom, date_naissance, lieu_naissance, sexe,
         classe_id, tuteur_nom, tuteur_prenom, tuteur_telephone, tuteur_email,
         tuteur_adresse, groupe_sanguin, allergies, maladies_chroniques,
-        statut, annee_scolaire, date_inscription
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        statut, annee_scolaire, date_inscription, ecole_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       RETURNING *`,
       [
         matricule,
@@ -234,7 +238,8 @@ exports.createEleve = async (req, res) => {
         data.maladiesChroniques || data.maladies_chroniques || [],
         data.statut || 'ACTIF',
         data.anneeScolaire || data.annee_scolaire,
-        data.dateInscription || data.date_inscription || new Date()
+        data.dateInscription || data.date_inscription || new Date(),
+        req.ecoleId
       ]
     );
 
@@ -319,7 +324,7 @@ exports.updateEleve = async (req, res) => {
     values.push(req.params.id);
 
     const sql = `UPDATE eleves SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
-    const result = await query(sql, values);
+    const result = await queryScoped(req.ecoleId, sql, values);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Élève non trouvé' });
@@ -335,7 +340,8 @@ exports.updateEleve = async (req, res) => {
 // @route   DELETE /api/eleves/:id
 exports.deleteEleve = async (req, res) => {
   try {
-    const result = await query(
+    const result = await queryScoped(
+      req.ecoleId,
       'DELETE FROM eleves WHERE id = $1 RETURNING id',
       [req.params.id]
     );
@@ -360,7 +366,7 @@ exports.importEleves = async (req, res) => {
 
   // Si anneeScolaire non fournie, utiliser l'année active
   if (!anneeScolaire) {
-    const anneeRes = await query(`SELECT annee FROM annees_scolaires WHERE active = true LIMIT 1`);
+    const anneeRes = await queryScoped(req.ecoleId, `SELECT annee FROM annees_scolaires WHERE active = true LIMIT 1`);
     anneeScolaire = anneeRes.rows[0]?.annee || null;
   }
 
@@ -369,7 +375,7 @@ exports.importEleves = async (req, res) => {
   }
 
   // Pré-charger toutes les classes pour la résolution par nom
-  const classesResult = await query('SELECT id, nom FROM classes');
+  const classesResult = await queryScoped(req.ecoleId, 'SELECT id, nom FROM classes');
   const classeMap = {};
   for (const c of classesResult.rows) {
     classeMap[c.nom.toLowerCase().trim()] = c.id;
@@ -377,7 +383,8 @@ exports.importEleves = async (req, res) => {
 
   // Récupérer le dernier matricule de l'année en cours
   const currentYear = new Date().getFullYear();
-  const lastMatriculeResult = await query(
+  const lastMatriculeResult = await queryScoped(
+    req.ecoleId,
     `SELECT matricule FROM eleves WHERE matricule LIKE $1 ORDER BY matricule DESC LIMIT 1`,
     [`EL${currentYear}%`]
   );
@@ -417,11 +424,12 @@ exports.importEleves = async (req, res) => {
       const matricule = `EL${currentYear}${nextNumber.toString().padStart(3, '0')}`;
       nextNumber++;
 
-      const result = await query(
+      const result = await queryScoped(
+        req.ecoleId,
         `INSERT INTO eleves (
           matricule, nom, prenom, date_naissance, lieu_naissance, sexe,
-          classe_id, tuteur_nom, tuteur_prenom, tuteur_telephone, statut, annee_scolaire, date_inscription
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, matricule, nom, prenom`,
+          classe_id, tuteur_nom, tuteur_prenom, tuteur_telephone, statut, annee_scolaire, date_inscription, ecole_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id, matricule, nom, prenom`,
         [
           matricule,
           e.nom.trim(),
@@ -435,7 +443,8 @@ exports.importEleves = async (req, res) => {
           e.tuteurTelephone || e.tuteur_telephone || null,
           'ACTIF',
           anneeScolaire || null,
-          new Date()
+          new Date(),
+          req.ecoleId
         ]
       );
       imported.push(result.rows[0]);
@@ -462,7 +471,8 @@ exports.getElevesStats = async (req, res) => {
     }
 
     // Total d'élèves
-    const totalResult = await query(
+    const totalResult = await queryScoped(
+      req.ecoleId,
       `SELECT COUNT(*) as count FROM eleves ${whereClause}`,
       params
     );
@@ -477,10 +487,11 @@ exports.getElevesStats = async (req, res) => {
       actifsQuery += 'WHERE statut = $1';
       actifsParams = ['ACTIF'];
     }
-    const actifsResult = await query(actifsQuery, actifsParams);
+    const actifsResult = await queryScoped(req.ecoleId, actifsQuery, actifsParams);
 
     // Par sexe
-    const parSexeResult = await query(
+    const parSexeResult = await queryScoped(
+      req.ecoleId,
       `SELECT sexe, COUNT(*) as count FROM eleves ${whereClause} GROUP BY sexe`,
       params
     );

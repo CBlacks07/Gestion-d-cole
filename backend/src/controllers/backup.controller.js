@@ -1,23 +1,36 @@
 const path = require('path');
 const fs = require('fs');
 const cron = require('node-cron');
-const { query, getClient } = require('../lib/db');
+const { query, queryScoped, queryBypassRls, getClient } = require('../lib/db');
 const logger = require('../lib/logger');
 
 const BACKUPS_DIR = process.env.BACKUPS_DIR || path.join(__dirname, '../../../backups');
 const SETTINGS_FILE = path.join(BACKUPS_DIR, '.settings.json');
 
+// Sur Vercel (et serverless en général), le disque est en lecture seule et
+// aucun scheduler en mémoire (node-cron) ne survit entre les invocations :
+// ce sous-système de sauvegarde planifiée sur fichier local ne peut pas
+// fonctionner tel quel. `exportBackup`/`restoreBackup` (par école, sans
+// aucune écriture disque) restent disponibles partout — seules les routes
+// `/auto/*` (déjà réservées à SUPER_ADMIN) sont désactivées ici.
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+// Ordre pensé pour respecter les clés étrangères à l'insertion (chaque
+// table n'apparaît qu'après toutes celles qu'elle référence) : ni Neon ni
+// un rôle applicatif non-superuser ne permettent de désactiver les
+// contraintes via `session_replication_role`, donc l'ordre doit être
+// correct par construction plutôt que contourné.
 const EXPORT_ORDER = [
   'annees_scolaires',
   'matieres',
   'enseignants',
+  'users',
   'classes',
   'eleves',
   'classe_matieres',
   'notes',
   'absences',
-  'paiements',
-  'users'
+  'paiements'
 ];
 
 const TRUNCATE_ORDER = [...EXPORT_ORDER].reverse();
@@ -49,6 +62,7 @@ const clampInt = (value, fallback, min, max) => {
 };
 
 function ensureBackupsDir() {
+  if (isServerless) return;
   if (!fs.existsSync(BACKUPS_DIR)) {
     fs.mkdirSync(BACKUPS_DIR, { recursive: true });
   }
@@ -128,22 +142,41 @@ function pruneOldBackups(keepCount) {
   });
 }
 
-async function generateBackupData(label) {
+// `ecoleId` null = dump complet (toutes les écoles) : réservé aux
+// sauvegardes planifiées (cron, hors requête HTTP) et à SUPER_ADMIN.
+// Toute route accessible à un ADMIN/DIRECTEUR d'école DOIT passer un
+// ecoleId pour ne jamais exposer les données d'une autre école.
+async function generateBackupData(label, ecoleId = null) {
   const backup = {
     version: '1.0',
     exportedAt: new Date().toISOString(),
     exportedBy: label || 'auto',
     database: process.env.DB_NAME || process.env.PGDATABASE || 'ECOLE',
+    ecoleId,
     tables: {}
   };
 
   for (const table of EXPORT_ORDER) {
+    const filterSql = ecoleId ? ' WHERE ecole_id = $1' : '';
+    const params = ecoleId ? [ecoleId] : [];
+    // `users` n'est pas sous RLS forcée (voir migration_multi_ecole.sql) :
+    // le filtre explicite ci-dessus suffit, `query` brut fonctionne.
+    // Toutes les autres tables SONT sous FORCE ROW LEVEL SECURITY : sans
+    // `app.ecole_id` (ou l'échappatoire bypass) actif dans la transaction,
+    // un `query()` brut renverrait silencieusement 0 ligne, peu importe le
+    // filtre WHERE — d'où l'usage de queryScoped/queryBypassRls ici.
+    const runQuery = table === 'users'
+      ? (sql, p) => query(sql, p)
+      : ecoleId
+        ? (sql, p) => queryScoped(ecoleId, sql, p)
+        : (sql, p) => queryBypassRls(sql, p);
+
     try {
-      const result = await query(`SELECT * FROM ${table} ORDER BY created_at ASC NULLS LAST`);
+      const result = await runQuery(`SELECT * FROM ${table}${filterSql} ORDER BY created_at ASC NULLS LAST`, params);
       backup.tables[table] = result.rows;
     } catch {
       try {
-        const result = await query(`SELECT * FROM ${table}`);
+        const result = await runQuery(`SELECT * FROM ${table}${filterSql}`, params);
         backup.tables[table] = result.rows;
       } catch (error) {
         backup.tables[table] = { error: error.message };
@@ -154,9 +187,9 @@ async function generateBackupData(label) {
   return backup;
 }
 
-async function createAndStoreBackup(exportedBy) {
+async function createAndStoreBackup(exportedBy, ecoleId = null) {
   ensureBackupsDir();
-  const data = await generateBackupData(exportedBy);
+  const data = await generateBackupData(exportedBy, ecoleId);
   const filename = createBackupFilename('backup_ecole');
   fs.writeFileSync(path.join(BACKUPS_DIR, filename), JSON.stringify(data, null, 2), 'utf8');
   return filename;
@@ -333,6 +366,10 @@ async function runScheduledRestoreTest() {
 }
 
 function startScheduler() {
+  // Rien à planifier en serverless : pas de process long-vivant pour
+  // porter un timer node-cron, et pas de disque pour loadSettings().
+  if (isServerless) return;
+
   const settings = loadSettings();
 
   if (backupCronTask) {
@@ -364,7 +401,7 @@ startScheduler();
 exports.exportBackup = async (req, res) => {
   try {
     const userLabel = `${req.user?.prenom || ''} ${req.user?.nom || ''}`.trim() || 'manual';
-    const data = await generateBackupData(userLabel);
+    const data = await generateBackupData(userLabel, req.ecoleId);
     const date = new Date().toISOString().slice(0, 10);
     const filename = `backup_ecole_${date}.json`;
 
@@ -377,6 +414,8 @@ exports.exportBackup = async (req, res) => {
   }
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 exports.restoreBackup = async (req, res) => {
   const { tables, version } = req.body;
 
@@ -388,17 +427,26 @@ exports.restoreBackup = async (req, res) => {
     return res.status(400).json({ message: `Version de sauvegarde non supportee: ${version}` });
   }
 
+  const ecoleId = req.ecoleId;
+  if (!ecoleId || !UUID_RE.test(ecoleId)) {
+    return res.status(403).json({ message: 'École non identifiée pour cet utilisateur' });
+  }
+
   const client = await getClient();
 
   try {
     await client.query('BEGIN');
-    await client.query("SET session_replication_role = 'replica'");
+    // Active la policy RLS pour cette transaction (tables sous FORCE ROW
+    // LEVEL SECURITY) : sans ça les INSERT ci-dessous échoueraient.
+    await client.query(`SET LOCAL app.ecole_id = '${ecoleId}'`);
 
+    // Ne supprime QUE les données de l'école de l'utilisateur qui restaure
+    // — jamais un TRUNCATE global, qui effacerait les autres écoles.
     for (const table of TRUNCATE_ORDER) {
       try {
-        await client.query(`TRUNCATE TABLE "${table}" RESTART IDENTITY CASCADE`);
+        await client.query(`DELETE FROM "${table}" WHERE ecole_id = $1`, [ecoleId]);
       } catch {
-        // Ignore missing tables.
+        // Ignore missing tables / tables sans colonne ecole_id.
       }
     }
 
@@ -411,13 +459,18 @@ exports.restoreBackup = async (req, res) => {
         continue;
       }
 
-      const columns = Object.keys(rows[0]);
+      // On ignore l'ecole_id éventuellement présent dans le fichier importé
+      // et on force celui de l'utilisateur courant : un fichier de
+      // sauvegarde ne doit jamais pouvoir injecter des données dans une
+      // autre école que celle de la personne qui restaure.
+      const columns = Array.from(new Set([...Object.keys(rows[0]), 'ecole_id']));
       let inserted = 0;
 
       for (const row of rows) {
+        const rowWithEcole = { ...row, ecole_id: ecoleId };
         const cols = columns.map((col) => `"${col}"`).join(', ');
         const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
-        const values = columns.map((col) => row[col]);
+        const values = columns.map((col) => rowWithEcole[col]);
 
         await client.query(
           `INSERT INTO "${table}" (${cols}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
@@ -430,17 +483,11 @@ exports.restoreBackup = async (req, res) => {
       stats[table] = inserted;
     }
 
-    await client.query("SET session_replication_role = 'DEFAULT'");
     await client.query('COMMIT');
 
     res.json({ message: 'Restauration effectuee avec succes', stats });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
-    try {
-      await client.query("SET session_replication_role = 'DEFAULT'");
-    } catch {
-      // Ignore rollback reset errors.
-    }
 
     logger.error('Erreur restauration:', error.message);
     res.status(500).json({ message: 'Erreur lors de la restauration', detail: error.message });
