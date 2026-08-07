@@ -358,6 +358,14 @@ Fix à appliquer avant le premier déploiement :
         `POST /api/ecoles` — comble le vide relevé plus haut ("UI frontend
         pour le signup d'école"). Résout le problème "poule et œuf" du tout
         premier compte admin sans intervention manuelle en base.
+      - **Verrou d'inscription** : le signup public était ouvert à tout le
+        monde (constat de l'utilisateur) → ajout d'un code d'invitation
+        (`SIGNUP_INVITE_CODE`, comparé côté serveur dans
+        `ecole.controller.js#createEcole`, avant toute autre validation).
+        Fail closed : si la variable n'est pas configurée sur Vercel, le
+        signup reste indisponible plutôt que de s'ouvrir. Champ requis
+        ajouté au formulaire `Signup.tsx` et à la validation de
+        `ecole.routes.js`.
       - **Pas fait / hors de portée sans accès** : création du projet
         Vercel, configuration réelle de ses variables d'environnement,
         Upstash Redis réel, déploiement réel — nécessite les identifiants
@@ -374,6 +382,7 @@ Fix à appliquer avant le premier déploiement :
 | `CORS_ORIGIN` | URL(s) du frontend Vercel, séparées par virgules |
 | `CRON_SECRET` | Générer une valeur aléatoire — Vercel l'injecte automatiquement en `Authorization: Bearer` sur les appels Cron s'il est défini au niveau projet |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Optionnel — sans eux, repli automatique sur le rate-limiting en mémoire (fonctionne mais pas partagé entre instances) |
+| `SIGNUP_INVITE_CODE` | Requis pour que `POST /api/ecoles` (page `/signup`) accepte une nouvelle école — sans elle, le signup self-service est fermé (fail closed). Générée une fois, à distribuer uniquement aux écoles invitées. |
 | `NODE_ENV` | `production` |
 
 - [ ] **Étape 6** : déploiement de test réel, vérification isolation en prod.

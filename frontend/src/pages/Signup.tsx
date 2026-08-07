@@ -13,6 +13,7 @@ const HIGHLIGHTS = [
 
 export default function Signup() {
   const [ecoleNom, setEcoleNom] = useState('')
+  const [codeInvitation, setCodeInvitation] = useState('')
   const [nom, setNom] = useState('')
   const [prenom, setPrenom] = useState('')
   const [email, setEmail] = useState('')
@@ -44,6 +45,7 @@ export default function Signup() {
         prenom: prenom.trim(),
         email: email.trim().toLowerCase(),
         motDePasse: password,
+        codeInvitation: codeInvitation.trim(),
       })
       const { token, ...user } = response.data
       login(user, token)
@@ -160,6 +162,22 @@ export default function Signup() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label htmlFor="codeInvitation" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Code d'invitation
+                </label>
+                <input
+                  id="codeInvitation"
+                  type="text"
+                  required
+                  value={codeInvitation}
+                  onChange={(e) => setCodeInvitation(e.target.value)}
+                  className="input"
+                  placeholder="Reçu de votre contact Gestion École"
+                  autoComplete="off"
+                />
+              </div>
+
               <div>
                 <label htmlFor="ecoleNom" className="block text-sm font-medium text-gray-700 mb-1.5">
                   Nom de l'établissement

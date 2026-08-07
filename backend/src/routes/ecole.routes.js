@@ -17,7 +17,7 @@ const { createRateLimiter, getClientIp } = require('../middleware/rateLimit');
  *         application/json:
  *           schema:
  *             type: object
- *             required: [ecoleNom, nom, prenom, email, motDePasse]
+ *             required: [ecoleNom, nom, prenom, email, motDePasse, codeInvitation]
  *             properties:
  *               ecoleNom: { type: string }
  *               ecoleSlug: { type: string, description: "Auto-généré depuis ecoleNom si absent" }
@@ -26,11 +26,14 @@ const { createRateLimiter, getClientIp } = require('../middleware/rateLimit');
  *               email: { type: string }
  *               motDePasse: { type: string, minLength: 8 }
  *               telephone: { type: string }
+ *               codeInvitation: { type: string, description: "Doit correspondre à SIGNUP_INVITE_CODE côté serveur" }
  *     responses:
  *       201:
  *         description: École + compte ADMIN créés, retourne un access token
  *       400:
  *         description: Données invalides ou email/identifiant déjà pris
+ *       403:
+ *         description: Code d'invitation invalide ou manquant
  */
 const createEcoleLimiter = createRateLimiter({
   windowMs: parseInt(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || '900000', 10),
@@ -53,6 +56,7 @@ const createEcoleRules = [
   body('motDePasse').isLength({ min: 8 }).withMessage('Le mot de passe doit contenir au moins 8 caractères'),
   body('nom').notEmpty().withMessage('Nom requis').trim().escape(),
   body('prenom').notEmpty().withMessage('Prénom requis').trim().escape(),
+  body('codeInvitation').notEmpty().withMessage("Code d'invitation requis"),
 ];
 
 router.post('/', createEcoleLimiter, createEcoleRules, handleValidation, createEcole);

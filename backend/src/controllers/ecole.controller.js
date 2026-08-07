@@ -32,10 +32,19 @@ const slugify = (value) =>
 // @route   POST /api/ecoles
 exports.createEcole = async (req, res) => {
   try {
-    const { ecoleNom, nom, prenom, email, motDePasse, telephone } = req.body;
+    const { ecoleNom, nom, prenom, email, motDePasse, telephone, codeInvitation } = req.body;
     let { ecoleSlug } = req.body;
 
     const normalizedEmail = String(email || '').trim().toLowerCase();
+
+    // Signup fermé par défaut : SIGNUP_INVITE_CODE doit être configuré ET
+    // correspondre exactement. Si la variable n'est pas définie, le signup
+    // reste indisponible plutôt que de s'ouvrir par erreur de configuration
+    // (fail closed, cohérent avec le reste des routes internes du projet).
+    const expectedCode = process.env.SIGNUP_INVITE_CODE;
+    if (!expectedCode || codeInvitation !== expectedCode) {
+      return res.status(403).json({ message: "Code d'invitation invalide" });
+    }
 
     if (!ecoleNom || !nom || !prenom || !normalizedEmail || !motDePasse) {
       return res.status(400).json({
