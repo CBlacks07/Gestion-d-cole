@@ -137,7 +137,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   appTagline: 'Système Togolais',
   themeId: 'green',
   darkMode: false,
-  logoUrl: '',
+  logoUrl: '/logo.png',
 }
 
 function applyDarkMode(enabled: boolean) {
