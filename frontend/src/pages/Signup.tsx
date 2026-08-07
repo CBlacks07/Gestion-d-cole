@@ -1,21 +1,24 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useAppSettings } from '../contexts/AppSettingsContext'
 import api from '../services/api'
-import { School, BookOpen, Users, TrendingUp } from 'lucide-react'
+import { School, Building2, Users, TrendingUp } from 'lucide-react'
 
 const HIGHLIGHTS = [
-  { icon: Users,      label: 'Gestion des élèves',      desc: 'Inscriptions, dossiers, bulletins' },
-  { icon: BookOpen,   label: 'Suivi académique',         desc: 'Notes, absences, résultats' },
-  { icon: TrendingUp, label: 'Finances scolaires',       desc: 'Paiements, recouvrement, rapports' },
+  { icon: Building2,  label: 'Votre établissement, votre espace', desc: 'Données isolées, propres à votre école' },
+  { icon: Users,      label: 'Élèves, enseignants, classes',       desc: 'Tout géré au même endroit' },
+  { icon: TrendingUp, label: 'Finances scolaires',                 desc: 'Paiements, recouvrement, rapports' },
 ]
 
-export default function Login() {
+export default function Signup() {
+  const [ecoleNom, setEcoleNom] = useState('')
+  const [nom, setNom] = useState('')
+  const [prenom, setPrenom] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
-  const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const { login } = useAuthStore()
@@ -24,20 +27,21 @@ export default function Login() {
   const appTagline = settings.appTagline || 'Système éducatif togolais'
   const logoUrl = settings.logoUrl || ''
 
-  useEffect(() => {
-    const msg = sessionStorage.getItem('auth_redirect_msg')
-    if (msg) {
-      setInfo(msg)
-      sessionStorage.removeItem('auth_redirect_msg')
-    }
-  }, [])
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (password !== confirmPassword) {
+      setError('Les mots de passe ne correspondent pas')
+      return
+    }
+
     setLoading(true)
     try {
-      const response = await api.post('/auth/login', {
+      const response = await api.post('/ecoles', {
+        ecoleNom: ecoleNom.trim(),
+        nom: nom.trim(),
+        prenom: prenom.trim(),
         email: email.trim().toLowerCase(),
         motDePasse: password,
       })
@@ -54,9 +58,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex">
       {/* Left branding panel — hidden on mobile */}
-      <div
-        className="hidden lg:flex lg:w-[45%] flex-col justify-between p-10 bg-forest-900 relative overflow-hidden"
-      >
+      <div className="hidden lg:flex lg:w-[45%] flex-col justify-between p-10 bg-forest-900 relative overflow-hidden">
         <div
           className="absolute inset-0 opacity-[0.32] pointer-events-none"
           style={{
@@ -71,7 +73,6 @@ export default function Login() {
         <div className="absolute -top-28 -right-28 w-80 h-80 rounded-full bg-forest-800 pointer-events-none" />
         <div className="absolute -bottom-36 -left-24 w-64 h-64 rounded-full border border-forest-500 pointer-events-none" />
 
-        {/* Logo */}
         <div className="flex items-center gap-3 relative">
           <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0 overflow-hidden">
             {logoUrl
@@ -85,18 +86,17 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Center content */}
         <div className="relative">
           <div className="inline-flex items-center gap-2 bg-primary-500/15 border border-primary-500/35 rounded-full px-4 py-2 mb-8">
             <span className="w-1.5 h-1.5 rounded-full bg-primary-400" />
-            <span className="text-[12.5px] tracking-wide text-primary-400 font-semibold uppercase">{appTagline}</span>
+            <span className="text-[12.5px] tracking-wide text-primary-400 font-semibold uppercase">Nouvel établissement</span>
           </div>
           <h2 className="text-4xl font-display font-bold text-cream-100 leading-tight mb-4 max-w-md">
-            Gérez votre école, en toute simplicité.
+            Créez l'espace de votre école.
           </h2>
           <p className="text-forest-100 text-sm mb-10 leading-relaxed max-w-sm">
-            Plateforme complète de gestion scolaire — élèves, enseignants, notes,
-            absences et paiements en un seul endroit.
+            Un compte administrateur est créé automatiquement — vous pourrez
+            ensuite inviter votre équipe depuis la section Utilisateurs.
           </p>
 
           <div className="space-y-4 max-w-sm">
@@ -114,7 +114,6 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Footer */}
         <p className="text-forest-100 text-xs relative">
           © {new Date().getFullYear()} {appName}
         </p>
@@ -123,7 +122,6 @@ export default function Login() {
       {/* Right form panel */}
       <div className="flex-1 flex items-center justify-center bg-cream-100 px-5 py-10">
         <div className="w-full max-w-md">
-          {/* Mobile logo */}
           <div className="flex flex-col items-center mb-8 gap-2 lg:hidden">
             <div className="h-14 w-14 rounded-2xl bg-forest-900 flex items-center justify-center overflow-hidden">
               {logoUrl
@@ -136,15 +134,9 @@ export default function Login() {
 
           <div className="bg-white rounded-2xl shadow-sm border border-cream-300 p-8">
             <div className="mb-7">
-              <h1 className="text-xl font-display font-bold text-gray-900">Connexion</h1>
-              <p className="text-gray-500 text-sm mt-1">Entrez vos identifiants pour accéder au tableau de bord.</p>
+              <h1 className="text-xl font-display font-bold text-gray-900">Créer votre établissement</h1>
+              <p className="text-gray-500 text-sm mt-1">Quelques informations pour démarrer.</p>
             </div>
-
-            {info && (
-              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-sm">
-                {info}
-              </div>
-            )}
 
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
@@ -153,6 +145,50 @@ export default function Login() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label htmlFor="ecoleNom" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Nom de l'établissement
+                </label>
+                <input
+                  id="ecoleNom"
+                  type="text"
+                  required
+                  value={ecoleNom}
+                  onChange={(e) => setEcoleNom(e.target.value)}
+                  className="input"
+                  placeholder="Collège Saint-Joseph"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="prenom" className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Prénom
+                  </label>
+                  <input
+                    id="prenom"
+                    type="text"
+                    required
+                    value={prenom}
+                    onChange={(e) => setPrenom(e.target.value)}
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="nom" className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Nom
+                  </label>
+                  <input
+                    id="nom"
+                    type="text"
+                    required
+                    value={nom}
+                    onChange={(e) => setNom(e.target.value)}
+                    className="input"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
                   Adresse e-mail
@@ -164,7 +200,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="input"
-                  placeholder="votre@email.com"
+                  placeholder="vous@ecole.tg"
                 />
               </div>
 
@@ -181,6 +217,22 @@ export default function Login() {
                   className="input"
                   placeholder="••••••••"
                 />
+                <p className="mt-1 text-xs text-gray-400">8 caractères min. avec majuscule, chiffre ou caractère spécial.</p>
+              </div>
+
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Confirmer le mot de passe
+                </label>
+                <input
+                  id="confirmPassword"
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="input"
+                  placeholder="••••••••"
+                />
               </div>
 
               <button
@@ -188,12 +240,12 @@ export default function Login() {
                 disabled={loading}
                 className="btn btn-primary w-full py-2.5 text-base disabled:opacity-50"
               >
-                {loading ? 'Connexion en cours...' : 'Se connecter'}
+                {loading ? 'Création en cours...' : 'Créer mon établissement'}
               </button>
 
               <p className="text-center text-sm text-gray-500">
-                Nouvel établissement ?{' '}
-                <Link to="/signup" className="font-medium">Créer votre espace</Link>
+                Déjà un compte ?{' '}
+                <Link to="/login" className="font-medium">Se connecter</Link>
               </p>
             </form>
           </div>

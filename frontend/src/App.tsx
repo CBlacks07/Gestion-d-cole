@@ -5,6 +5,7 @@ import ToastContainer from './components/ToastContainer'
 import { AppSettingsProvider } from './contexts/AppSettingsContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import Signup from './pages/Signup'
 import Dashboard from './pages/Dashboard'
 import Eleves from './pages/Eleves'
 import EleveDetail from './pages/EleveDetail'
@@ -41,6 +42,7 @@ function App() {
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
         <Route
           path="/"
           element={

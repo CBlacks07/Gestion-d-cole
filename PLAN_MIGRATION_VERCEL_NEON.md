@@ -353,6 +353,11 @@ Fix à appliquer avant le premier déploiement :
       - Connection string réelle (rôle `gestion_app`, mot de passe généré)
         **jamais écrite dans le repo** — communiquée à l'utilisateur pour
         qu'il la mette dans les variables d'environnement Vercel lui-même.
+      - `frontend/src/pages/Signup.tsx` (nouveau) + route `/signup` : page
+        self-service "Créer votre établissement", branchée sur
+        `POST /api/ecoles` — comble le vide relevé plus haut ("UI frontend
+        pour le signup d'école"). Résout le problème "poule et œuf" du tout
+        premier compte admin sans intervention manuelle en base.
       - **Pas fait / hors de portée sans accès** : création du projet
         Vercel, configuration réelle de ses variables d'environnement,
         Upstash Redis réel, déploiement réel — nécessite les identifiants
