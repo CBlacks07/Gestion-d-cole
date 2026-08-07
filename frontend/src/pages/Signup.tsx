@@ -56,7 +56,32 @@ export default function Signup() {
   }
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex flex-col lg:flex-row">
+      {/* Mobile top branding band — hidden on desktop (replaced by the side panel below) */}
+      <div className="lg:hidden relative bg-forest-900 pt-10 pb-7 px-6 overflow-hidden shrink-0">
+        <div
+          className="absolute inset-0 opacity-[0.32] pointer-events-none"
+          style={{
+            backgroundImage: "url('/togo-flag.png')",
+            backgroundSize: '160%',
+            backgroundPosition: 'center',
+            transform: 'rotate(-9deg) scale(1.18)',
+            maskImage: 'radial-gradient(ellipse 70% 70% at 50% 40%, black 35%, transparent 85%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 70% 70% at 50% 40%, black 35%, transparent 85%)',
+          }}
+        />
+        <div className="relative flex flex-col items-center gap-2 text-center">
+          <div className="h-14 w-14 rounded-2xl bg-white/10 flex items-center justify-center overflow-hidden">
+            {logoUrl
+              ? <img src={logoUrl} alt="Logo" className="h-full w-full object-contain p-1" />
+              : <School className="h-8 w-8 text-primary-400" />
+            }
+          </div>
+          <p className="text-cream-100 font-display font-bold text-base">{appName}</p>
+          <p className="text-forest-100 text-xs">{appTagline}</p>
+        </div>
+      </div>
+
       {/* Left branding panel — hidden on mobile */}
       <div className="hidden lg:flex lg:w-[45%] flex-col justify-between p-10 bg-forest-900 relative overflow-hidden">
         <div
@@ -115,23 +140,13 @@ export default function Signup() {
         </div>
 
         <p className="text-forest-100 text-xs relative">
-          © {new Date().getFullYear()} {appName}
+          © {new Date().getFullYear()} {appName} — Développé par OPS CORPORATION
         </p>
       </div>
 
       {/* Right form panel */}
-      <div className="flex-1 flex items-center justify-center bg-cream-100 px-5 py-10">
-        <div className="w-full max-w-md">
-          <div className="flex flex-col items-center mb-8 gap-2 lg:hidden">
-            <div className="h-14 w-14 rounded-2xl bg-forest-900 flex items-center justify-center overflow-hidden">
-              {logoUrl
-                ? <img src={logoUrl} alt="Logo" className="h-full w-full object-contain p-1" />
-                : <School className="h-8 w-8 text-primary-400" />
-              }
-            </div>
-            <p className="text-sm font-semibold text-gray-800">{appName}</p>
-          </div>
-
+      <div className="flex-1 flex flex-col items-center justify-center bg-cream-100 px-5 pb-8 pt-0 -mt-5 lg:mt-0 lg:py-10">
+        <div className="w-full max-w-md relative z-10">
           <div className="bg-white rounded-2xl shadow-sm border border-cream-300 p-8">
             <div className="mb-7">
               <h1 className="text-xl font-display font-bold text-gray-900">Créer votre établissement</h1>
@@ -250,6 +265,10 @@ export default function Signup() {
             </form>
           </div>
         </div>
+
+        <p className="lg:hidden text-center text-[11px] text-gray-400 mt-6">
+          © {new Date().getFullYear()} {appName} — Développé par OPS CORPORATION
+        </p>
       </div>
     </div>
   )
