@@ -3,7 +3,7 @@ import api from '../services/api'
 import { Calendar, BookOpen, Plus, CheckCircle, Edit2, Trash2, X, Palette, ImagePlus, Download, Loader2, Upload, RefreshCw, Clock, HardDrive, Lock, Mail } from 'lucide-react'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { useToast } from '../contexts/ToastContext'
-import { useAppSettings, COLOR_THEMES } from '../contexts/AppSettingsContext'
+import { useAppSettings } from '../contexts/AppSettingsContext'
 import { useAuthStore } from '../store/authStore'
 
 function MatiereSection({
@@ -656,39 +656,6 @@ export default function Configuration() {
                   }}
                 />
               </div>
-            </div>
-          </div>
-
-          {/* Thème couleur */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Couleur du thème
-            </label>
-            <div className="flex flex-wrap gap-3">
-              {COLOR_THEMES.map(theme => (
-                <button
-                  key={theme.id}
-                  type="button"
-                  onClick={() => {
-                    updateSettings({ themeId: theme.id })
-                    success(`Thème "${theme.label}" appliqué`)
-                  }}
-                  className={`flex items-center gap-2 rounded-lg border-2 px-3 py-2 text-sm font-medium transition-all ${
-                    settings.themeId === theme.id
-                      ? 'border-gray-900 shadow-md'
-                      : 'border-gray-200 hover:border-gray-400'
-                  }`}
-                >
-                  <span
-                    className="h-5 w-5 rounded-full border border-black/10 flex-shrink-0"
-                    style={{ backgroundColor: theme.swatch }}
-                  />
-                  {theme.label}
-                  {settings.themeId === theme.id && (
-                    <span className="text-xs text-gray-500">✓</span>
-                  )}
-                </button>
-              ))}
             </div>
           </div>
         </div>
