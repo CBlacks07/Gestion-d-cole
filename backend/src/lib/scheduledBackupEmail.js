@@ -8,19 +8,13 @@ const { generateBackupData } = require('../controllers/backup.controller');
 const { sendEmail } = require('./mailer');
 const logger = require('./logger');
 
-const FREQUENCY_INTERVALS = {
-  daily: '1 day',
-  weekly: '7 days',
-  monthly: '1 month',
-};
-
 // Écoles dues : activées, et jamais envoyées OU dernier envoi plus vieux
 // que leur fréquence choisie. `queryBypassRls` est nécessaire ici : ce job
 // n'a pas de req.ecoleId (il tourne pour toutes les écoles), c'est le seul
 // contexte légitime pour l'échappatoire bypass_rls (voir migration_multi_ecole.sql).
 async function findDueEcoles() {
   const result = await queryBypassRls(
-    `SELECT s.ecole_id, s.frequency, e.nom AS ecole_nom
+    `SELECT s.ecole_id, s.frequency, s.custom_email, e.nom AS ecole_nom
      FROM ecole_backup_settings s
      JOIN ecoles e ON e.id = s.ecole_id
      WHERE s.enabled = true
@@ -35,7 +29,11 @@ async function findDueEcoles() {
   return result.rows;
 }
 
-async function getRecipients(ecoleId) {
+// Si un email personnalisé est configuré, il remplace entièrement les
+// destinataires par défaut (voir migration_backup_email.sql).
+async function getRecipients(ecoleId, customEmail) {
+  if (customEmail) return [{ email: customEmail }];
+
   // `users` n'est pas sous RLS forcée (voir migration_multi_ecole.sql) —
   // un filtre explicite ecole_id suffit avec `query` brut.
   const result = await query(
@@ -56,7 +54,7 @@ async function markResult(ecoleId, status, error) {
 }
 
 async function sendBackupForEcole(ecole) {
-  const recipients = await getRecipients(ecole.ecole_id);
+  const recipients = await getRecipients(ecole.ecole_id, ecole.custom_email);
   if (recipients.length === 0) {
     await markResult(ecole.ecole_id, 'FAILED', 'Aucun destinataire (ADMIN/DIRECTEUR actif) trouvé');
     return { ecoleId: ecole.ecole_id, ecoleNom: ecole.ecole_nom, sent: false, error: 'Aucun destinataire' };

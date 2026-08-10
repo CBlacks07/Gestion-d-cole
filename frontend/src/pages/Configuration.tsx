@@ -96,7 +96,8 @@ export default function Configuration() {
   const [savingNow, setSavingNow] = useState(false)
   const [autoSettings, setAutoSettings] = useState<{ enabled: boolean; frequency: string; hour: number; keepCount: number; lastBackup: string | null }>({ enabled: false, frequency: 'daily', hour: 2, keepCount: 7, lastBackup: null })
   const [savedFiles, setSavedFiles] = useState<Array<{ filename: string; size: number; createdAt: string }>>([])
-  const [emailBackup, setEmailBackup] = useState<{ enabled: boolean; frequency: string; lastSentAt: string | null; lastStatus: string | null; lastError: string | null }>({ enabled: false, frequency: 'weekly', lastSentAt: null, lastStatus: null, lastError: null })
+  const [emailBackup, setEmailBackup] = useState<{ enabled: boolean; frequency: string; customEmail: string | null; lastSentAt: string | null; lastStatus: string | null; lastError: string | null }>({ enabled: false, frequency: 'weekly', customEmail: null, lastSentAt: null, lastStatus: null, lastError: null })
+  const [customEmailDraft, setCustomEmailDraft] = useState('')
   const [savingEmailBackup, setSavingEmailBackup] = useState(false)
   const [restoreConfirm, setRestoreConfirm] = useState(false)
   const [pendingRestoreData, setPendingRestoreData] = useState<any>(null)
@@ -368,6 +369,7 @@ export default function Configuration() {
     try {
       const res = await api.get('/backup/email-settings')
       setEmailBackup(res.data)
+      setCustomEmailDraft(res.data.customEmail || '')
     } catch { /* ignore */ }
   }
 
@@ -376,11 +378,16 @@ export default function Configuration() {
     setEmailBackup(next)
     setSavingEmailBackup(true)
     try {
-      const res = await api.put('/backup/email-settings', { enabled: next.enabled, frequency: next.frequency })
+      const res = await api.put('/backup/email-settings', {
+        enabled: next.enabled,
+        frequency: next.frequency,
+        customEmail: next.customEmail,
+      })
       setEmailBackup(res.data.settings)
+      setCustomEmailDraft(res.data.settings.customEmail || '')
       success('Paramètres de sauvegarde par email mis à jour')
-    } catch {
-      toastError('Erreur lors de la mise à jour')
+    } catch (err: any) {
+      toastError(err?.response?.data?.message || 'Erreur lors de la mise à jour')
     } finally {
       setSavingEmailBackup(false)
     }
@@ -997,19 +1004,41 @@ export default function Configuration() {
           </div>
 
           {emailBackup.enabled && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Fréquence</label>
-              <select
-                className="input max-w-xs"
-                value={emailBackup.frequency}
-                onChange={e => handleEmailBackupChange({ frequency: e.target.value })}
-              >
-                <option value="daily">Quotidienne</option>
-                <option value="weekly">Hebdomadaire</option>
-                <option value="monthly">Mensuelle</option>
-              </select>
-              <p className="mt-1 text-xs text-gray-400">
-                Envoyée aux administrateurs et directeurs de l'école.
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fréquence</label>
+                <select
+                  className="input"
+                  value={emailBackup.frequency}
+                  onChange={e => handleEmailBackupChange({ frequency: e.target.value })}
+                >
+                  <option value="daily">Quotidienne</option>
+                  <option value="weekly">Hebdomadaire</option>
+                  <option value="monthly">Mensuelle</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Adresse email de réception (optionnel)
+                </label>
+                <input
+                  type="email"
+                  className="input"
+                  placeholder="ex: it@monecole.tg"
+                  value={customEmailDraft}
+                  onChange={e => setCustomEmailDraft(e.target.value)}
+                  onBlur={() => {
+                    const trimmed = customEmailDraft.trim()
+                    if (trimmed !== (emailBackup.customEmail || '')) {
+                      handleEmailBackupChange({ customEmail: trimmed || null })
+                    }
+                  }}
+                />
+              </div>
+              <p className="sm:col-span-2 -mt-2 text-xs text-gray-400">
+                {emailBackup.customEmail
+                  ? `Envoyée uniquement à ${emailBackup.customEmail}.`
+                  : "Laissez vide pour envoyer aux administrateurs et directeurs actifs de l'école — remplissez pour envoyer uniquement à cette adresse."}
               </p>
             </div>
           )}

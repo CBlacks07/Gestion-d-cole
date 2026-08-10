@@ -9,12 +9,17 @@ CREATE TABLE IF NOT EXISTS ecole_backup_settings (
   ecole_id      UUID PRIMARY KEY REFERENCES ecoles(id) ON DELETE CASCADE,
   enabled       BOOLEAN NOT NULL DEFAULT false,
   frequency     VARCHAR(20) NOT NULL DEFAULT 'weekly',
+  custom_email  TEXT,
   last_sent_at  TIMESTAMPTZ,
   last_status   VARCHAR(20),
   last_error    TEXT,
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT chk_backup_settings_frequency CHECK (frequency IN ('daily', 'weekly', 'monthly'))
 );
+
+-- Idempotent même si la table existait déjà sans cette colonne (première
+-- version de cette migration).
+ALTER TABLE ecole_backup_settings ADD COLUMN IF NOT EXISTS custom_email TEXT;
 
 DROP TRIGGER IF EXISTS update_ecole_backup_settings_updated_at ON ecole_backup_settings;
 CREATE TRIGGER update_ecole_backup_settings_updated_at BEFORE UPDATE ON ecole_backup_settings
@@ -32,3 +37,4 @@ CREATE POLICY tenant_isolation ON ecole_backup_settings USING (
 );
 
 COMMENT ON TABLE ecole_backup_settings IS 'Paramètres de sauvegarde automatique par email, un enregistrement par école. Le job planifié (Vercel Cron -> /internal/scheduled-backup-emails) lit cette table pour savoir qui est "dû" pour un envoi.';
+COMMENT ON COLUMN ecole_backup_settings.custom_email IS 'Si renseigné, remplace entièrement les destinataires par défaut (ADMIN/DIRECTEUR actifs de l''école) — la sauvegarde part uniquement vers cette adresse.';

@@ -6,9 +6,12 @@
 const { queryScoped } = require('../lib/db');
 const logger = require('../lib/logger');
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const DEFAULT_SETTINGS = {
   enabled: false,
   frequency: 'weekly',
+  customEmail: null,
   lastSentAt: null,
   lastStatus: null,
   lastError: null,
@@ -17,6 +20,7 @@ const DEFAULT_SETTINGS = {
 const toApi = (row) => ({
   enabled: row?.enabled ?? DEFAULT_SETTINGS.enabled,
   frequency: row?.frequency ?? DEFAULT_SETTINGS.frequency,
+  customEmail: row?.custom_email ?? null,
   lastSentAt: row?.last_sent_at ?? null,
   lastStatus: row?.last_status ?? null,
   lastError: row?.last_error ?? null,
@@ -43,13 +47,21 @@ exports.updateBackupEmailSettings = async (req, res) => {
       ? req.body.frequency
       : 'weekly';
 
+    // Chaîne vide ou absente = pas de champ personnalisé (retombe sur les
+    // ADMIN/DIRECTEUR de l'école, voir lib/scheduledBackupEmail.js).
+    const rawEmail = typeof req.body?.customEmail === 'string' ? req.body.customEmail.trim() : '';
+    if (rawEmail && !EMAIL_RE.test(rawEmail)) {
+      return res.status(400).json({ message: 'Adresse email invalide' });
+    }
+    const customEmail = rawEmail || null;
+
     const result = await queryScoped(
       req.ecoleId,
-      `INSERT INTO ecole_backup_settings (ecole_id, enabled, frequency)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (ecole_id) DO UPDATE SET enabled = $2, frequency = $3
+      `INSERT INTO ecole_backup_settings (ecole_id, enabled, frequency, custom_email)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (ecole_id) DO UPDATE SET enabled = $2, frequency = $3, custom_email = $4
        RETURNING *`,
-      [req.ecoleId, enabled, frequency]
+      [req.ecoleId, enabled, frequency, customEmail]
     );
 
     res.json({ message: 'Paramètres mis à jour', settings: toApi(result.rows[0]) });
