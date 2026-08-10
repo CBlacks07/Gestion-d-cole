@@ -7,7 +7,10 @@ import { Plus, Edit2, Trash2, ShieldCheck, UserCheck, UserX } from 'lucide-react
 import ConfirmDialog from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
 
-const ROLES = ['ADMIN', 'DIRECTEUR', 'ENSEIGNANT', 'SECRETAIRE', 'COMPTABLE'] as const
+// Doit rester synchronisé avec role_enum côté backend (voir schema.sql) —
+// "COMPTABLE" a été retiré : il n'a jamais existé dans l'enum Postgres,
+// choisir ce rôle faisait échouer la création d'utilisateur (500).
+const ROLES = ['ADMIN', 'DIRECTEUR', 'ENSEIGNANT', 'SECRETAIRE'] as const
 type Role = typeof ROLES[number]
 
 const ROLE_COLORS: Record<string, string> = {
@@ -15,7 +18,6 @@ const ROLE_COLORS: Record<string, string> = {
   DIRECTEUR: 'bg-purple-100 text-purple-800',
   ENSEIGNANT: 'bg-blue-100 text-blue-800',
   SECRETAIRE: 'bg-green-100 text-green-800',
-  COMPTABLE: 'bg-orange-100 text-orange-800',
 }
 
 interface UserData {
