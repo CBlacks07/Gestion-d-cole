@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const { query } = require('../lib/db');
 const { logAuditEvent } = require('../lib/audit');
+const { bootstrapEcoleDefaults } = require('../lib/ecoleBootstrap');
 const logger = require('../lib/logger');
 const {
   generateAccessToken,
@@ -91,6 +92,11 @@ exports.createEcole = async (req, res) => {
       [nom, prenom, normalizedEmail, hashedPassword, telephone || null, ecole.id]
     );
     const user = userResult.rows[0];
+
+    // Sans ça, la nouvelle école n'a aucune année scolaire active ni
+    // matière : /annees/active renvoie 404 dès le premier login et Notes/
+    // Rapports/Dashboard échouent en cascade (voir lib/ecoleBootstrap.js).
+    await bootstrapEcoleDefaults(ecole.id);
 
     // Route publique (pas de `protect`) : req.ecoleId n'est pas encore
     // renseigné à ce stade. On le fixe explicitement pour que ce premier

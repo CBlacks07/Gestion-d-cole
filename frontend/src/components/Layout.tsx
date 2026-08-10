@@ -131,7 +131,7 @@ export default function Layout() {
         } ${collapsed ? 'lg:w-16' : 'lg:w-64'}`}
       >
         {/* Logo */}
-        <div className={`flex h-14 items-center border-b border-forest-700 shrink-0 ${collapsed ? 'lg:justify-center lg:px-0 px-4 justify-between' : 'justify-between px-4'}`}>
+        <div className={`flex ${settings.appTagline ? 'h-16' : 'h-14'} items-center border-b border-forest-700 shrink-0 ${collapsed ? 'lg:justify-center lg:px-0 px-4 justify-between' : 'justify-between px-4'}`}>
           <Link to="/" className={`flex items-center gap-2.5 min-w-0 ${collapsed ? 'lg:justify-center' : ''}`} onClick={() => setSidebarOpen(false)}>
             {settings.logoUrl ? (
               <img
@@ -148,6 +148,11 @@ export default function Layout() {
               <p className="text-sm font-display font-semibold text-cream-100 leading-tight truncate">
                 {settings.appName}
               </p>
+              {settings.appTagline && (
+                <p className="text-[10px] text-forest-100 leading-tight truncate">
+                  {settings.appTagline}
+                </p>
+              )}
             </div>
           </Link>
           <div className="flex items-center gap-1">
