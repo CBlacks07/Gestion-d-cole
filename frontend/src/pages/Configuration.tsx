@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react'
 import api from '../services/api'
-import { Calendar, BookOpen, Plus, CheckCircle, Edit2, Trash2, X, Palette, ImagePlus, Download, Loader2, Upload, RefreshCw, Clock, HardDrive, Lock } from 'lucide-react'
+import { Calendar, BookOpen, Plus, CheckCircle, Edit2, Trash2, X, Palette, ImagePlus, Download, Loader2, Upload, RefreshCw, Clock, HardDrive, Lock, Mail } from 'lucide-react'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { useToast } from '../contexts/ToastContext'
 import { useAppSettings, COLOR_THEMES } from '../contexts/AppSettingsContext'
+import { useAuthStore } from '../store/authStore'
 
 function MatiereSection({
   titre,
@@ -80,6 +81,11 @@ const TABS: { id: Tab; label: string; icon: ComponentType<{ className?: string }
 export default function Configuration() {
   const { success, error: toastError } = useToast()
   const { settings, updateSettings } = useAppSettings()
+  const { user } = useAuthStore()
+  // Sauvegarde planifiée = dump multi-écoles, réservé à SUPER_ADMIN côté
+  // backend (voir backup.routes.js) — on évite l'appel/l'affichage pour un
+  // ADMIN d'école, qui recevrait systématiquement un 403.
+  const isSuperAdmin = String(user?.role || '').toUpperCase() === 'SUPER_ADMIN'
   const [activeTab, setActiveTab] = useState<Tab>('personnalisation')
   const [appNameDraft, setAppNameDraft] = useState(settings.appName)
   const [appTaglineDraft, setAppTaglineDraft] = useState(settings.appTagline)
@@ -90,6 +96,8 @@ export default function Configuration() {
   const [savingNow, setSavingNow] = useState(false)
   const [autoSettings, setAutoSettings] = useState<{ enabled: boolean; frequency: string; hour: number; keepCount: number; lastBackup: string | null }>({ enabled: false, frequency: 'daily', hour: 2, keepCount: 7, lastBackup: null })
   const [savedFiles, setSavedFiles] = useState<Array<{ filename: string; size: number; createdAt: string }>>([])
+  const [emailBackup, setEmailBackup] = useState<{ enabled: boolean; frequency: string; lastSentAt: string | null; lastStatus: string | null; lastError: string | null }>({ enabled: false, frequency: 'weekly', lastSentAt: null, lastStatus: null, lastError: null })
+  const [savingEmailBackup, setSavingEmailBackup] = useState(false)
   const [restoreConfirm, setRestoreConfirm] = useState(false)
   const [pendingRestoreData, setPendingRestoreData] = useState<any>(null)
   const [deleteFileConfirm, setDeleteFileConfirm] = useState<string | null>(null)
@@ -165,7 +173,8 @@ export default function Configuration() {
 
   useEffect(() => {
     loadData()
-    loadAutoSettings()
+    loadEmailBackupSettings()
+    if (isSuperAdmin) loadAutoSettings()
   }, [])
 
   const loadData = async () => {
@@ -353,6 +362,28 @@ export default function Configuration() {
       setAutoSettings(res.data.settings)
       setSavedFiles(res.data.files)
     } catch { /* ignore if not admin */ }
+  }
+
+  const loadEmailBackupSettings = async () => {
+    try {
+      const res = await api.get('/backup/email-settings')
+      setEmailBackup(res.data)
+    } catch { /* ignore */ }
+  }
+
+  const handleEmailBackupChange = async (patch: Partial<typeof emailBackup>) => {
+    const next = { ...emailBackup, ...patch }
+    setEmailBackup(next)
+    setSavingEmailBackup(true)
+    try {
+      const res = await api.put('/backup/email-settings', { enabled: next.enabled, frequency: next.frequency })
+      setEmailBackup(res.data.settings)
+      success('Paramètres de sauvegarde par email mis à jour')
+    } catch {
+      toastError('Erreur lors de la mise à jour')
+    } finally {
+      setSavingEmailBackup(false)
+    }
   }
 
   const handleBackup = async () => {
@@ -940,11 +971,73 @@ export default function Configuration() {
           />
         </div>
 
-        {/* Sauvegarde automatique */}
+        {/* Sauvegarde automatique par email — scopée à l'école, accessible
+            à ADMIN/DIRECTEUR (voir backupEmail.controller.js). */}
         <div className="rounded-xl bg-gray-50 border border-gray-100 p-4 space-y-4">
           <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-gray-500" /> Sauvegarde automatique
+            <Mail className="h-4 w-4 text-gray-500" /> Sauvegarde automatique par email
           </h3>
+          <p className="text-sm text-gray-500">
+            Recevez régulièrement une copie complète des données de votre école par email,
+            sans avoir à y penser.
+          </p>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => handleEmailBackupChange({ enabled: !emailBackup.enabled })}
+              disabled={savingEmailBackup}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${emailBackup.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${emailBackup.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+            <span className="text-sm font-medium text-gray-700">
+              {emailBackup.enabled ? 'Activée' : 'Désactivée'}
+            </span>
+          </div>
+
+          {emailBackup.enabled && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fréquence</label>
+              <select
+                className="input max-w-xs"
+                value={emailBackup.frequency}
+                onChange={e => handleEmailBackupChange({ frequency: e.target.value })}
+              >
+                <option value="daily">Quotidienne</option>
+                <option value="weekly">Hebdomadaire</option>
+                <option value="monthly">Mensuelle</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-400">
+                Envoyée aux administrateurs et directeurs de l'école.
+              </p>
+            </div>
+          )}
+
+          {emailBackup.lastSentAt && (
+            <p className="text-xs text-gray-500">
+              Dernier envoi : <strong>{new Date(emailBackup.lastSentAt).toLocaleString('fr-FR')}</strong>
+              {emailBackup.lastStatus === 'FAILED' && (
+                <span className="text-red-600"> — échec{emailBackup.lastError ? ` (${emailBackup.lastError})` : ''}</span>
+              )}
+              {emailBackup.lastStatus === 'SUCCESS' && (
+                <span className="text-emerald-600"> — envoyé avec succès</span>
+              )}
+            </p>
+          )}
+        </div>
+
+        {/* Sauvegarde automatique planifiée — dump multi-écoles, réservé à
+            SUPER_ADMIN côté backend (voir backup.routes.js) : masqué pour un
+            ADMIN d'école, qui n'y a de toute façon pas accès. */}
+        {isSuperAdmin && (
+        <div className="rounded-xl bg-gray-50 border border-gray-100 p-4 space-y-4">
+          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+            <Clock className="h-4 w-4 text-gray-500" /> Sauvegarde planifiée (plateforme)
+          </h3>
+          <p className="text-sm text-gray-500 -mt-2">
+            Dump fichier de toutes les écoles, réservé aux opérateurs de la plateforme.
+          </p>
 
           <div className="flex items-center gap-3">
             <button
@@ -1018,8 +1111,11 @@ export default function Configuration() {
             </button>
           </div>
         </div>
+        )}
 
-        {/* Liste des fichiers sauvegardés */}
+        {/* Liste des fichiers sauvegardés (implicitement vide pour un ADMIN
+            d'école, puisque loadAutoSettings() n'est appelé que pour
+            SUPER_ADMIN ci-dessus) */}
         {savedFiles.length > 0 && (
           <div className="rounded-xl bg-gray-50 border border-gray-100 p-4 space-y-2">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Sauvegardes sur le serveur ({savedFiles.length})</h3>

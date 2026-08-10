@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
 const ctrl = require('../controllers/backup.controller');
+const emailCtrl = require('../controllers/backupEmail.controller');
 
 const adminOnly = [protect, authorize('ADMIN')];
 const admDir = [protect, authorize('ADMIN', 'DIRECTEUR')];
@@ -30,6 +31,11 @@ router.get('/', admDir, ctrl.exportBackup);
 
 // Restore from uploaded JSON — scopé à l'école de l'utilisateur (ne touche jamais les autres écoles)
 router.post('/restore', adminOnly, ctrl.restoreBackup);
+
+// Sauvegarde automatique par email, scopée à l'école — accessible à
+// ADMIN/DIRECTEUR (contrairement à /auto/*, réservé SUPER_ADMIN, voir plus bas).
+router.get('/email-settings', admDir, emailCtrl.getBackupEmailSettings);
+router.put('/email-settings', admDir, emailCtrl.updateBackupEmailSettings);
 
 // Auto-backup settings + file list (dump multi-écoles)
 router.get('/auto/settings', superAdminOnly, blockOnServerless, ctrl.getAutoSettings);

@@ -4,6 +4,7 @@
 const express = require('express');
 const router = express.Router();
 const { cleanupExpiredTokens } = require('../lib/tokenCleanup');
+const { runScheduledBackupEmails } = require('../lib/scheduledBackupEmail');
 const logger = require('../lib/logger');
 
 const requireCronSecret = (req, res, next) => {
@@ -47,6 +48,33 @@ router.get('/cleanup-tokens', requireCronSecret, async (req, res) => {
   } catch (error) {
     logger.error('Erreur cleanup-tokens (cron):', { message: error.message });
     res.status(500).json({ message: 'Erreur lors du nettoyage' });
+  }
+});
+
+/**
+ * @swagger
+ * /internal/scheduled-backup-emails:
+ *   get:
+ *     summary: Envoie la sauvegarde par email aux écoles dues (usage Vercel Cron uniquement)
+ *     tags: [Internal]
+ *     security: []
+ *     parameters:
+ *       - in: header
+ *         name: Authorization
+ *         required: true
+ *         description: "Bearer <CRON_SECRET>"
+ *     responses:
+ *       200: { description: Job exécuté }
+ *       401: { description: Secret invalide }
+ *       404: { description: CRON_SECRET non configuré, route désactivée }
+ */
+router.get('/scheduled-backup-emails', requireCronSecret, async (req, res) => {
+  try {
+    const summary = await runScheduledBackupEmails();
+    res.json({ message: 'Job de sauvegarde par email exécuté', ...summary });
+  } catch (error) {
+    logger.error('Erreur scheduled-backup-emails (cron):', { message: error.message });
+    res.status(500).json({ message: 'Erreur lors du job de sauvegarde par email' });
   }
 });
 

@@ -366,6 +366,20 @@ Fix à appliquer avant le premier déploiement :
         signup reste indisponible plutôt que de s'ouvrir. Champ requis
         ajouté au formulaire `Signup.tsx` et à la validation de
         `ecole.routes.js`.
+      - **Sauvegarde automatique par école (email)** : l'ancien système
+        `/backup/auto/*` (dump multi-écoles, fichier local, node-cron)
+        est réservé à SUPER_ADMIN et ne fonctionne pas sur Vercel (pas de
+        disque persistant) — un ADMIN d'école n'y avait donc jamais accès.
+        Ajout d'un système parallèle, scopé par école, compatible
+        serverless : table `ecole_backup_settings` (activé/fréquence/statut
+        par école), job déclenché par un 2e Vercel Cron
+        (`/internal/scheduled-backup-emails`, quotidien, ne fait rien pour
+        les écoles pas encore dues selon leur fréquence), envoi par email
+        via Resend (`lib/mailer.js`, fail closed sans `RESEND_API_KEY`).
+        Nouvelle section "Sauvegarde automatique par email" dans
+        Configuration, visible à tout ADMIN/DIRECTEUR de son école.
+        Vérifié en local (toggle + persistance DB + job cron exécuté
+        manuellement, fail-closed confirmé sans clé Resend configurée).
       - **Pas fait / hors de portée sans accès** : création du projet
         Vercel, configuration réelle de ses variables d'environnement,
         Upstash Redis réel, déploiement réel — nécessite les identifiants
@@ -383,6 +397,8 @@ Fix à appliquer avant le premier déploiement :
 | `CRON_SECRET` | Générer une valeur aléatoire — Vercel l'injecte automatiquement en `Authorization: Bearer` sur les appels Cron s'il est défini au niveau projet |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Optionnel — sans eux, repli automatique sur le rate-limiting en mémoire (fonctionne mais pas partagé entre instances) |
 | `SIGNUP_INVITE_CODE` | Requis pour que `POST /api/ecoles` (page `/signup`) accepte une nouvelle école — sans elle, le signup self-service est fermé (fail closed). Générée une fois, à distribuer uniquement aux écoles invitées. |
+| `RESEND_API_KEY` | Optionnel — sans elle, la sauvegarde automatique par email (Configuration > Sauvegarde) reste inactive (échec journalisé, pas de crash). Créer un compte sur resend.com et **vérifier un domaine d'envoi** (obligatoire pour envoyer à des destinataires autres que le propriétaire du compte Resend). |
+| `BACKUP_EMAIL_FROM` | Adresse d'expédition des sauvegardes par email, doit appartenir au domaine vérifié sur Resend (ex: `SchoolTogo <backups@votredomaine.tg>`) |
 | `NODE_ENV` | `production` |
 
 - [ ] **Étape 6** : déploiement de test réel, vérification isolation en prod.

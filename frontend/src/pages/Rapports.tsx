@@ -110,12 +110,12 @@ export default function Rapports() {
           `rapport_financier_${date}`,
           'Paiements',
           [
-            { path: 'date', label: 'Date' },
+            { path: 'date', label: 'Date', type: 'date' },
             { path: 'matricule', label: 'Matricule eleve' },
             { path: 'nom', label: 'Nom eleve' },
             { path: 'prenom', label: 'Prenom eleve' },
             { path: 'type', label: 'Type paiement' },
-            { path: 'montant', label: 'Montant' },
+            { path: 'montant', label: 'Montant', type: 'currency' },
             { path: 'devise', label: 'Devise' },
             { path: 'mode', label: 'Mode' },
             { path: 'mois', label: 'Mois concerne' },
@@ -142,9 +142,9 @@ export default function Rapports() {
             { path: 'matricule', label: 'Matricule' },
             { path: 'nom', label: 'Nom' },
             { path: 'prenom', label: 'Prenom' },
-            { path: 'total', label: 'Total absences' },
-            { path: 'justifiees', label: 'Justifiees' },
-            { path: 'nonJustifiees', label: 'Non justifiees' }
+            { path: 'total', label: 'Total absences', type: 'number' },
+            { path: 'justifiees', label: 'Justifiees', type: 'number' },
+            { path: 'nonJustifiees', label: 'Non justifiees', type: 'number' }
           ]
         )
         return
@@ -161,7 +161,7 @@ export default function Rapports() {
           'Effectifs',
           [
             { path: 'cycle', label: 'Cycle' },
-            { path: 'count', label: 'Nombre eleves' }
+            { path: 'count', label: 'Nombre eleves', type: 'number' }
           ]
         )
         return
@@ -186,9 +186,9 @@ export default function Rapports() {
             { path: 'cycle', label: 'Cycle' },
             { path: 'niveau', label: 'Niveau' },
             { path: 'annee', label: 'Année scolaire' },
-            { path: 'effectif', label: 'Effectif' },
-            { path: 'nombreNotes', label: 'Nombre de notes' },
-            { path: 'moyenne', label: 'Moyenne (/20)' }
+            { path: 'effectif', label: 'Effectif', type: 'number' },
+            { path: 'nombreNotes', label: 'Nombre de notes', type: 'number' },
+            { path: 'moyenne', label: 'Moyenne (/20)', type: 'number' }
           ]
         )
         return

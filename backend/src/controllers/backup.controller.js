@@ -398,6 +398,10 @@ function startScheduler() {
 ensureBackupsDir();
 startScheduler();
 
+// Réutilisé par lib/scheduledBackupEmail.js (sauvegarde auto par email,
+// par école) pour ne pas dupliquer la logique d'export scopée par école.
+exports.generateBackupData = generateBackupData;
+
 exports.exportBackup = async (req, res) => {
   try {
     const userLabel = `${req.user?.prenom || ''} ${req.user?.nom || ''}`.trim() || 'manual';

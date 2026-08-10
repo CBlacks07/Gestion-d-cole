@@ -19,6 +19,7 @@
     { "source": "/(.*)", "destination": { "service": "frontend" } }
   ],
   "crons": [
-    { "path": "/api/v1/internal/cleanup-tokens", "schedule": "0 3 * * *" }
+    { "path": "/api/v1/internal/cleanup-tokens", "schedule": "0 3 * * *" },
+    { "path": "/api/v1/internal/scheduled-backup-emails", "schedule": "0 2 * * *" }
   ]
 }
