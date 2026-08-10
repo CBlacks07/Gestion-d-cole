@@ -179,7 +179,7 @@ exports.generateBulletinPdf = async (req, res) => {
     // Pied de page
     doc.fontSize(8).fillColor('#888888')
       .text(
-        `Généré le ${new Date().toLocaleDateString('fr-FR')} — Gestion École Togo`,
+        `Généré le ${new Date().toLocaleDateString('fr-FR')} — SchoolTogo`,
         40,
         doc.page.height - 50,
         { align: 'center', width: doc.page.width - 80 }

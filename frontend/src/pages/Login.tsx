@@ -20,7 +20,7 @@ export default function Login() {
   const navigate = useNavigate()
   const { login } = useAuthStore()
   const { settings } = useAppSettings()
-  const appName = settings.appName || 'Gestion École'
+  const appName = settings.appName || 'SchoolTogo'
   const appTagline = settings.appTagline || 'Système éducatif togolais'
   const logoUrl = settings.logoUrl || ''
 

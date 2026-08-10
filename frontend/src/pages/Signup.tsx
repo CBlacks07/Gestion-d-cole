@@ -24,7 +24,7 @@ export default function Signup() {
   const navigate = useNavigate()
   const { login } = useAuthStore()
   const { settings } = useAppSettings()
-  const appName = settings.appName || 'Gestion École'
+  const appName = settings.appName || 'SchoolTogo'
   const appTagline = settings.appTagline || 'Système éducatif togolais'
   const logoUrl = settings.logoUrl || ''
 
@@ -173,7 +173,7 @@ export default function Signup() {
                   value={codeInvitation}
                   onChange={(e) => setCodeInvitation(e.target.value)}
                   className="input"
-                  placeholder="Reçu de votre contact Gestion École"
+                  placeholder="Reçu de votre contact SchoolTogo"
                   autoComplete="off"
                 />
               </div>

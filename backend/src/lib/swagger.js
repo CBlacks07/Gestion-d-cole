@@ -4,7 +4,7 @@ const options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'API Gestion École Togo',
+      title: 'API SchoolTogo',
       version: '3.0.0',
       description: `
 API REST complète pour la gestion d'établissements scolaires au Togo.
@@ -15,7 +15,7 @@ Supporte les cycles Primaire, Collège et Lycée.
 **Pagination :** Les endpoints liste acceptent \`?page=1&limit=50\`.
 `,
       contact: {
-        name: 'Gestion École Togo',
+        name: 'SchoolTogo',
       },
     },
     servers: [

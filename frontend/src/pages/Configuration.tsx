@@ -530,7 +530,7 @@ export default function Configuration() {
                 className="input"
                 value={appNameDraft}
                 onChange={e => setAppNameDraft(e.target.value)}
-                placeholder="Gestion École"
+                placeholder="SchoolTogo"
               />
             </div>
             <div>
@@ -550,7 +550,7 @@ export default function Configuration() {
             <button
               type="button"
               onClick={() => {
-                updateSettings({ appName: appNameDraft.trim() || 'Gestion École', appTagline: appTaglineDraft })
+                updateSettings({ appName: appNameDraft.trim() || 'SchoolTogo', appTagline: appTaglineDraft })
                 success('Nom de l\'application mis à jour')
               }}
               className="btn btn-primary"

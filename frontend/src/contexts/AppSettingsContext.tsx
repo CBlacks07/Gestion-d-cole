@@ -133,7 +133,7 @@ export interface AppSettings {
 const STORAGE_KEY = 'app:settings:v1'
 
 const DEFAULT_SETTINGS: AppSettings = {
-  appName: 'Gestion École',
+  appName: 'SchoolTogo',
   appTagline: 'Système Togolais',
   themeId: 'green',
   darkMode: false,

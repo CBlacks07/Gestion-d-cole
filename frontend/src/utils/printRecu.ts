@@ -58,7 +58,7 @@ export function printRecu(paiement: {
   montantDu?: number
   totalPayeAnnuel?: number
 }) {
-  let appName = 'Gestion École'
+  let appName = 'SchoolTogo'
   let appTagline = 'Système de gestion scolaire'
   let logoUrl = ''
   try {

@@ -5,7 +5,7 @@ const PDFDocument = require('pdfkit');
 const outputDir = path.join(__dirname, '..', '..', 'docs');
 fs.mkdirSync(outputDir, { recursive: true });
 
-const outputPath = path.join(outputDir, 'brochure-gestion-ecole.pdf');
+const outputPath = path.join(outputDir, 'brochure-schooltogo.pdf');
 const imagesDir = path.join(outputDir, 'brochure-images');
 const doc = new PDFDocument({ size: 'A4', margin: 50 });
 doc.pipe(fs.createWriteStream(outputPath));
@@ -124,12 +124,12 @@ function drawPanel(title, lines, x, y, w, h, options = {}) {
 
 // Header band
 doc.rect(0, 0, pageWidth, 90).fill(colors.primary);
-doc.fillColor('white').fontSize(24).text('Gestion Ecole', 50, 26);
+doc.fillColor('white').fontSize(24).text('SchoolTogo', 50, 26);
 doc.fontSize(12).text('La gestion scolaire simple, fiable et moderne', 50, 56);
 
 doc.moveDown(2.4);
 paragraph(
-  "Gestion Ecole est une application complete pour les etablissements scolaires au Togo. " +
+  "SchoolTogo est une application complete pour les etablissements scolaires au Togo. " +
   "Elle centralise la scolarite, les notes, les paiements et les bulletins dans un seul espace, " +
   "pour gagner du temps, reduire les erreurs et piloter l'ecole en toute confiance."
 );
