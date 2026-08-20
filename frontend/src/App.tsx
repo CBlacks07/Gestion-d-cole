@@ -6,6 +6,8 @@ import { AppSettingsProvider } from './contexts/AppSettingsContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
+import MentionsLegales from './pages/MentionsLegales'
+import Confidentialite from './pages/Confidentialite'
 import Dashboard from './pages/Dashboard'
 import Eleves from './pages/Eleves'
 import EleveDetail from './pages/EleveDetail'
@@ -43,6 +45,8 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/mentions-legales" element={<MentionsLegales />} />
+        <Route path="/confidentialite" element={<Confidentialite />} />
         <Route
           path="/"
           element={

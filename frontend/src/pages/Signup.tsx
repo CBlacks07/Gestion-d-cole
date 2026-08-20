@@ -144,6 +144,11 @@ export default function Signup() {
         <p className="text-forest-100 text-xs relative">
           © {new Date().getFullYear()} {appName} — Développé par OPS CORPORATION
         </p>
+        <p className="text-forest-100/70 text-[11px] relative mt-1 flex items-center gap-2">
+          <Link to="/mentions-legales" className="hover:text-cream-100">Mentions légales</Link>
+          <span>·</span>
+          <Link to="/confidentialite" className="hover:text-cream-100">Confidentialité</Link>
+        </p>
       </div>
 
       {/* Right form panel */}
@@ -286,6 +291,11 @@ export default function Signup() {
 
         <p className="lg:hidden text-center text-[11px] text-gray-400 mt-6">
           © {new Date().getFullYear()} {appName} — Développé par OPS CORPORATION
+        </p>
+        <p className="lg:hidden text-center text-[11px] text-gray-400 mt-1 flex items-center justify-center gap-2">
+          <Link to="/mentions-legales" className="hover:text-gray-600">Mentions légales</Link>
+          <span>·</span>
+          <Link to="/confidentialite" className="hover:text-gray-600">Confidentialité</Link>
         </p>
       </div>
     </div>
